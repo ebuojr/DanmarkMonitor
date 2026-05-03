@@ -26,6 +26,7 @@ export function StorebaeltCamera() {
     setError(false)
 
     async function init() {
+      // @ts-ignore — hls.js ships its own types but module resolution fails on some build envs
       const Hls = (await import('hls.js')).default
 
       hlsRef.current?.destroy()
