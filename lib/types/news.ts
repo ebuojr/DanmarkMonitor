@@ -1,4 +1,4 @@
-export type NewsSource = 'DR' | 'TV2'
+export type NewsSource = string
 
 export interface Article {
   id: string

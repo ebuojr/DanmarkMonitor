@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { fetchAllNews } from '@/lib/api/rss'
+import { fetchWallnotNews } from '@/lib/api/wallnot'
 
 export async function GET() {
   const updatedAt = new Date().toISOString()
   try {
-    const articles = await fetchAllNews()
+    const articles = await fetchWallnotNews()
     return NextResponse.json({ data: { articles, updatedAt }, updatedAt })
   } catch (error) {
     return NextResponse.json(
