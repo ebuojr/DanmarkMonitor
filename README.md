@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DanmarkMonitor
 
-## Getting Started
+Real-time situational awareness dashboard for Denmark. Live map with weather, energy, transport, and road traffic — all in one command-center view.
 
-First, run the development server:
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript) ![MapLibre](https://img.shields.io/badge/MapLibre-GL-green)
+
+## What it shows
+
+- **Weather** — Live temperature readings from ~300 DMI stations across Denmark, plus active weather warnings
+- **Energy** — Real-time electricity production mix (wind, solar, nuclear imports, fossil) and CO₂ intensity
+- **Transport** — Live positions of trains, S-tog, metro, and buses with motion trails and destination info
+- **Road traffic** — Live incidents from Vejdirektoratet: roadblocks, roadworks, queue warnings, ice/snow, and more
+- **Spot prices** — DK1 (vest) and DK2 (øst) electricity spot prices in øre/kWh via billigkwh.dk
+- **Stocks** — OMXC25 index and major Danish equities (Novo Nordisk, Mærsk, DSV, Ørsted, Carlsberg)
+- **News** — Cycling headlines from Danish outlets (wallnot.dk) in the bottom bar, full feed in the left sidebar
+- **Storebælt camera** — Live HLS stream of the Great Belt Bridge (two camera angles)
+
+## Map modes
+
+| Mode | Description |
+|------|-------------|
+| Nat | Inverted OSM — dark, high contrast |
+| Satellit | ESRI World Imagery |
+| Standard | CartoDB Voyager — clean and readable |
+
+## Stack
+
+- **Next.js 16** App Router + React 19 + TypeScript
+- **MapLibre GL JS** for all map rendering
+- **Tailwind v4** CSS-only config
+- **SWR** for client-side data polling
+- **hls.js** for live video streaming
+
+All external data is fetched server-side through Next.js API routes — no API keys required.
+
+## Getting started
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npx tsc --noEmit   # type check
+npm run build      # production build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## License
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
