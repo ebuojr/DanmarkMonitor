@@ -17,7 +17,7 @@ function ArticleRow({ article }: { article: Article }) {
       className="group block space-y-0.5 rounded-md px-2 py-1.5 hover:bg-muted/50 transition-colors"
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-medium leading-tight group-hover:text-primary line-clamp-2">
+        <p className="text-sm font-medium leading-snug group-hover:text-primary line-clamp-2">
           {article.title}
         </p>
       </div>
@@ -25,7 +25,7 @@ function ArticleRow({ article }: { article: Article }) {
         <span className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide">
           {article.source}
         </span>
-        <span className="text-[10px] text-muted-foreground/40">{time}</span>
+        <span className="text-xs text-muted-foreground">{time}</span>
       </div>
     </a>
   )

@@ -121,6 +121,10 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
   }
   body {
     @apply bg-background text-foreground;
@@ -128,4 +132,36 @@
   html {
     @apply font-sans;
   }
+}
+
+/* Applied only when map-invert class is present (dark/inverted OSM mode) */
+.map-invert .maplibregl-canvas {
+  filter: invert(93%) hue-rotate(180deg) brightness(92%) contrast(88%) saturate(0.85);
+}
+
+/* MapLibre popup — dark theme matching dashboard */
+.maplibregl-popup-content {
+  background: oklch(0.205 0 0);
+  color: oklch(0.985 0 0);
+  border: 1px solid oklch(1 0 0 / 10%);
+  border-radius: 8px;
+  padding: 10px 13px;
+  font-size: 13px;
+  line-height: 1.55;
+  box-shadow: 0 8px 24px oklch(0 0 0 / 50%);
+  min-width: 140px;
+}
+.maplibregl-popup-close-button {
+  color: oklch(0.708 0 0);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+.maplibregl-popup-close-button:hover {
+  background: oklch(1 0 0 / 10%);
+  color: oklch(0.985 0 0);
+}
+.maplibregl-popup-tip {
+  display: none;
 }

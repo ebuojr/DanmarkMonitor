@@ -4,14 +4,6 @@ import { fetchWeatherObservations, fetchWeatherWarnings } from '@/lib/api/dmi'
 export async function GET() {
   const updatedAt = new Date().toISOString()
 
-  if (!process.env.DMI_API_KEY) {
-    return NextResponse.json({
-      data: { stations: [], warnings: [], updatedAt },
-      error: 'DMI_API_KEY not configured. Register at opendatadocs.dmi.govcloud.dk',
-      updatedAt,
-    })
-  }
-
   try {
     const [stations, warnings] = await Promise.all([
       fetchWeatherObservations(),

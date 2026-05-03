@@ -1,16 +1,25 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import { Moon, Globe, Map } from 'lucide-react'
 import { AlertsSidebar } from './AlertsSidebar'
 import { DataSidebar } from './DataSidebar'
-import { TransportTicker } from './TransportTicker'
-import { DenmarkMap, type LayerType } from '@/components/map/DenmarkMap'
+import { NewsTicker } from './NewsTicker'
+import { DenmarkMap, type LayerType, type MapStyle } from '@/components/map/DenmarkMap'
 import { LayerControls } from '@/components/map/LayerControls'
+import { cn } from '@/lib/utils'
 
-const DEFAULT_LAYERS: Set<LayerType> = new Set(['weather', 'transport', 'cameras'])
+const DEFAULT_LAYERS: Set<LayerType> = new Set(['weather', 'energy', 'transport', 'roadtraffic'])
+
+const MAP_STYLES: { id: MapStyle; label: string; Icon: React.ComponentType<{ size?: number }> }[] = [
+  { id: 'dark',      label: 'Nat',      Icon: Moon  },
+  { id: 'satellite', label: 'Satellit', Icon: Globe },
+  { id: 'flat',      label: 'Standard', Icon: Map   },
+]
 
 export function CommandCenter() {
   const [activeLayers, setActiveLayers] = useState<Set<LayerType>>(DEFAULT_LAYERS)
+  const [mapStyle, setMapStyle] = useState<MapStyle>('dark')
 
   const handleLayerToggle = useCallback((layer: LayerType) => {
     setActiveLayers((prev) => {
@@ -37,15 +46,33 @@ export function CommandCenter() {
           </span>
         </div>
 
-        <LayerControls activeLayers={activeLayers} onToggle={handleLayerToggle} />
+        <div className="flex items-center gap-3">
+          <LayerControls activeLayers={activeLayers} onToggle={handleLayerToggle} />
+
+          {/* Map style toggle */}
+          <div className="flex items-center gap-0.5 rounded-md border border-border bg-muted p-0.5">
+            {MAP_STYLES.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                onClick={() => setMapStyle(id)}
+                title={label}
+                className={cn(
+                  'flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors',
+                  mapStyle === id
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Icon size={12} />
+                <span className="hidden md:inline">{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <span className="hidden md:block">
-            {new Date().toLocaleDateString('da-DK', {
-              weekday: 'short',
-              day: 'numeric',
-              month: 'short',
-            })}
+            {new Date().toLocaleDateString('da-DK', { weekday: 'short', day: 'numeric', month: 'short' })}
           </span>
           <LiveClock />
         </div>
@@ -55,32 +82,31 @@ export function CommandCenter() {
       <main className="flex flex-1 min-h-0 overflow-hidden">
         <AlertsSidebar />
 
-        {/* Map */}
         <div className="flex-1 min-w-0 relative">
-          <DenmarkMap activeLayers={activeLayers} />
+          <DenmarkMap activeLayers={activeLayers} mapStyle={mapStyle} />
         </div>
 
         <DataSidebar />
       </main>
 
-      {/* Transport ticker */}
       <footer className="shrink-0 h-9 border-t border-border bg-background/80 backdrop-blur-sm">
-        <TransportTicker />
+        <NewsTicker />
       </footer>
     </div>
   )
 }
 
 function LiveClock() {
-  const fmt = () =>
-    new Date().toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-
-  const [time, setTime] = useState(fmt)
+  const [time, setTime] = useState<string | null>(null)
 
   useEffect(() => {
+    const fmt = () =>
+      new Date().toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setTime(fmt())
     const id = setInterval(() => setTime(fmt()), 1000)
     return () => clearInterval(id)
   }, [])
 
+  if (!time) return null
   return <span className="font-mono tabular-nums">{time}</span>
 }

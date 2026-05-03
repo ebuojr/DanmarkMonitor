@@ -66,12 +66,12 @@ export function EnergyWidget() {
           <div key={s.key} className="flex items-center gap-1.5 text-xs">
             <span className={cn('size-2 rounded-full shrink-0', s.color)} />
             <span className="text-muted-foreground">{s.label}</span>
-            <span className="ml-auto tabular-nums">{s.value} MW</span>
+            <span className="ml-auto tabular-nums text-sm font-medium">{s.value} MW</span>
           </div>
         ))}
       </div>
 
-      <div className="flex items-center justify-between border-t border-border pt-2 text-xs">
+      <div className="flex items-center justify-between border-t border-border pt-2 text-sm">
         <span className="text-muted-foreground">CO₂ intensitet</span>
         <span className="tabular-nums font-medium">{co2} g/kWh</span>
       </div>

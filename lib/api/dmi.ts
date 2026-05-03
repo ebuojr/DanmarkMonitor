@@ -1,12 +1,7 @@
 import type { WeatherStation, WeatherWarning, WarningSeverity } from '@/lib/types/weather'
 
-const BASE_URL = 'https://dmigw.govcloud.dk/v2'
-
-function getApiKey(): string {
-  const key = process.env.DMI_API_KEY
-  if (!key) throw new Error('DMI_API_KEY environment variable not set')
-  return key
-}
+const BASE_URL = 'https://opendataapi.dmi.dk/v2/metObs'
+const DENMARK_BBOX = '7,54,16,58'
 
 interface DmiObservationFeature {
   type: 'Feature'
@@ -36,16 +31,13 @@ interface DmiCapFeature {
 }
 
 export async function fetchWeatherObservations(): Promise<WeatherStation[]> {
-  const key = getApiKey()
-
-  // Fetch latest temperature observations grouped by station
-  const url = new URL(`${BASE_URL}/metObs/collections/observation/items`)
-  url.searchParams.set('api-key', key)
+  const url = new URL(`${BASE_URL}/collections/observation/items`)
   url.searchParams.set('parameterId', 'temp_dry')
   url.searchParams.set('period', 'latest-hour')
-  url.searchParams.set('limit', '200')
+  url.searchParams.set('bbox', DENMARK_BBOX)
+  url.searchParams.set('limit', '300')
 
-  const res = await fetch(url.toString(), { next: { revalidate: 300 } })
+  const res = await fetch(url.toString(), { next: { revalidate: 600 } })
   if (!res.ok) throw new Error(`DMI obs fetch failed: ${res.status}`)
 
   const data = await res.json()
@@ -58,33 +50,30 @@ export async function fetchWeatherObservations(): Promise<WeatherStation[]> {
     if (!stationMap.has(stationId)) {
       stationMap.set(stationId, { stationId, name: stationId, lat, lon })
     }
-    const station = stationMap.get(stationId)!
-    station.temperature = value
+    stationMap.get(stationId)!.temperature = value
   }
 
   return Array.from(stationMap.values())
 }
 
 export async function fetchWeatherWarnings(): Promise<WeatherWarning[]> {
-  const key = getApiKey()
-
-  const url = new URL(`${BASE_URL}/cap/collections/CAP_DK/items`)
-  url.searchParams.set('api-key', key)
-  url.searchParams.set('limit', '50')
-
-  const res = await fetch(url.toString(), { next: { revalidate: 120 } })
-  if (!res.ok) return []
-
-  const data = await res.json()
-  const features: DmiCapFeature[] = data.features ?? []
-
-  return features.map((f) => ({
-    id: f.id,
-    severity: (f.properties.severity?.toLowerCase() as WarningSeverity) ?? 'minor',
-    event: f.properties.event ?? '',
-    area: f.properties.areaDesc ?? '',
-    description: f.properties.description ?? '',
-    onset: f.properties.onset ?? '',
-    expires: f.properties.expires ?? '',
-  }))
+  try {
+    const url = new URL('https://opendataapi.dmi.dk/v2/cap/collections/CAP_DK/items')
+    url.searchParams.set('limit', '50')
+    const res = await fetch(url.toString(), { next: { revalidate: 120 } })
+    if (!res.ok) return []
+    const data = await res.json()
+    const features: DmiCapFeature[] = data.features ?? []
+    return features.map((f) => ({
+      id: f.id,
+      severity: (f.properties.severity?.toLowerCase() as WarningSeverity) ?? 'minor',
+      event: f.properties.event ?? '',
+      area: f.properties.areaDesc ?? '',
+      description: f.properties.description ?? '',
+      onset: f.properties.onset ?? '',
+      expires: f.properties.expires ?? '',
+    }))
+  } catch {
+    return []
+  }
 }
