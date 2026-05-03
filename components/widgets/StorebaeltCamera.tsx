@@ -38,7 +38,7 @@ export function StorebaeltCamera() {
         hls.loadSource(stream.url)
         hls.attachMedia(video!)
         hls.on(Hls.Events.MANIFEST_PARSED, () => { video!.play().catch(() => {}) })
-        hls.on(Hls.Events.ERROR, (_evt, data) => { if (data.fatal) setError(true) })
+        hls.on(Hls.Events.ERROR, (_evt: unknown, data: { fatal: boolean }) => { if (data.fatal) setError(true) })
       } else if (video!.canPlayType('application/vnd.apple.mpegurl')) {
         video!.src = stream.url
         video!.play().catch(() => {})
