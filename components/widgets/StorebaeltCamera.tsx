@@ -15,7 +15,8 @@ export function StorebaeltCamera() {
   const [error, setError] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const hlsRef = useRef<import('hls.js').default | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hlsRef = useRef<any>(null)
 
   useEffect(() => {
     const video = videoRef.current
