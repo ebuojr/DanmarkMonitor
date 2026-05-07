@@ -139,28 +139,28 @@
   filter: invert(93%) hue-rotate(180deg) brightness(92%) contrast(88%) saturate(0.85);
 }
 
-/* MapLibre popup — dark theme matching dashboard */
+/* MapLibre popup — follows active theme via CSS variables */
 .maplibregl-popup-content {
-  background: oklch(0.205 0 0);
-  color: oklch(0.985 0 0);
-  border: 1px solid oklch(1 0 0 / 10%);
+  background: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 13px;
   font-size: 13px;
   line-height: 1.55;
-  box-shadow: 0 8px 24px oklch(0 0 0 / 50%);
+  box-shadow: 0 8px 24px oklch(0 0 0 / 30%);
   min-width: 140px;
 }
 .maplibregl-popup-close-button {
-  color: oklch(0.708 0 0);
+  color: var(--muted-foreground);
   font-size: 14px;
   line-height: 1;
   padding: 2px 5px;
   border-radius: 3px;
 }
 .maplibregl-popup-close-button:hover {
-  background: oklch(1 0 0 / 10%);
-  color: oklch(0.985 0 0);
+  background: var(--accent);
+  color: var(--foreground);
 }
 .maplibregl-popup-tip {
   display: none;

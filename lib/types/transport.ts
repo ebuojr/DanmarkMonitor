@@ -35,6 +35,8 @@ export interface Vehicle {
   nextStop: string
   prevStop: string
   journeyRef: string
+  delay?: number
+  platform?: string
 }
 
 export interface VehicleData {

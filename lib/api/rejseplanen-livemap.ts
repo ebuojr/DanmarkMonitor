@@ -4,12 +4,19 @@ import type { Vehicle, VehicleType } from '@/lib/types/transport'
 // Coordinates are in millionths of degrees (divide by 1,000,000)
 const LIVEMAP_URL = 'https://webapp.rejseplanen.dk/bin/query.exe/mny'
 
-// Bounding box covering all of Denmark
-const BBOX = {
+// Bounding box covering all of Denmark (in millionths of degrees)
+const DENMARK_BBOX = {
   minx: 3262939,
   maxx: 17325439,
   miny: 54175296,
   maxy: 58162010,
+}
+
+export interface ViewportBbox {
+  minLon: number
+  maxLon: number
+  minLat: number
+  maxLat: number
 }
 
 // All vehicle category codes (trains + buses + metro)
@@ -42,7 +49,15 @@ function classifyVehicle(name: string, category: number): VehicleType {
   return 'other'
 }
 
-export async function fetchLiveVehicles(): Promise<Vehicle[]> {
+export async function fetchLiveVehicles(viewport?: ViewportBbox): Promise<Vehicle[]> {
+  const BBOX = viewport
+    ? {
+        minx: Math.round(viewport.minLon * 1_000_000),
+        maxx: Math.round(viewport.maxLon * 1_000_000),
+        miny: Math.round(viewport.minLat * 1_000_000),
+        maxy: Math.round(viewport.maxLat * 1_000_000),
+      }
+    : DENMARK_BBOX
   const now = new Date()
   const ts = now.toISOString().slice(0, 10).replace(/-/g, '').slice(2) // YYMMDD → actually YYYYMMDD
   const tsFormatted = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
@@ -84,7 +99,10 @@ export async function fetchLiveVehicles(): Promise<Vehicle[]> {
       const lon = v[1] / 1_000_000
       const lat = v[2] / 1_000_000
       const journeyRef = String(v[3])
+      const delayRaw = String(v[4] ?? '').trim()
+      const delay = delayRaw !== '' && !isNaN(Number(delayRaw)) ? parseInt(delayRaw, 10) : undefined
       const category = Number(v[5]) || 0
+      const platform = String(v[6] ?? '').trim() || undefined
       const nextStop = String(v[7] ?? '').trim()
       const destination = String(v[9] ?? '').trim()
       const prevStop = String(v[11] ?? '').trim()
@@ -100,6 +118,8 @@ export async function fetchLiveVehicles(): Promise<Vehicle[]> {
         nextStop,
         prevStop,
         journeyRef,
+        delay,
+        platform,
       }
     })
     .filter((v) => v.lat > 54 && v.lat < 58 && v.lon > 5 && v.lon < 16)

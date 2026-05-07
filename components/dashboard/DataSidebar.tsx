@@ -19,7 +19,7 @@ function SectionHeader({ icon: Icon, label }: { icon: React.ComponentType<{ size
 
 export function DataSidebar() {
   return (
-    <aside className="flex flex-col h-full overflow-hidden border-l border-border shrink-0 w-80">
+    <aside className="flex flex-col h-full overflow-hidden border-l border-border shrink-0 w-full lg:w-80">
       <div className="shrink-0 border-b border-border">
         <SectionHeader icon={Video} label="Storebælt Live" />
         <StorebaeltCamera />

@@ -11,7 +11,7 @@ export function AlertsSidebar() {
   const alertCount = data?.data?.alerts.length ?? 0
 
   return (
-    <aside className="flex flex-col h-full overflow-hidden border-r border-border shrink-0 w-80">
+    <aside className="flex flex-col h-full overflow-hidden border-r border-border shrink-0 w-full lg:w-80">
       {/* Alerts */}
       <div className="shrink-0 border-b border-border">
         <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">

@@ -11,8 +11,12 @@ import { WIND_TURBINES_GEOJSON } from '@/lib/data/wind-turbines'
 
 type PopupInfo =
   | { kind: 'turbine'; name: string; capacity_mw: number; turbines: number; year: number }
-  | { kind: 'vehicle'; name: string; type: string; destination: string; nextStop: string; prevStop: string }
+  | { kind: 'vehicle'; name: string; type: string; destination: string; nextStop: string; prevStop: string; delay?: number; platform?: string }
   | { kind: 'road'; category: string; title: string; header: string; kommune: string; direction: string; beginPeriod: string; endPeriod: string; description: string }
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ROAD_COLOR_EXPR: any[] = [
@@ -126,9 +130,10 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
   const [popupInfo, setPopupInfo] = useState<PopupInfo | null>(null)
   const setPopupRef = useRef(setPopupInfo)
   useEffect(() => { setPopupRef.current = setPopupInfo }, [])
+  const [vehicleBbox, setVehicleBbox] = useState<{ minLon: number; maxLon: number; minLat: number; maxLat: number } | undefined>(undefined)
 
   const { data: weatherData } = useWeather()
-  const { data: vehicleData } = useVehicles()
+  const { data: vehicleData } = useVehicles(vehicleBbox)
   const { data: roadTrafficData } = useRoadTraffic()
 
   // ── Init map once ──────────────────────────────────────────────────────────
@@ -237,8 +242,8 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
       })
 
       onLayerClick('vehicle-circles', 9, (f) => {
-        const p = f.properties as { name: string; destination: string; nextStop: string; prevStop: string; type: string }
-        return { kind: 'vehicle', name: p.name, type: p.type, destination: p.destination ?? '', nextStop: p.nextStop ?? '', prevStop: p.prevStop ?? '' }
+        const p = f.properties as { name: string; destination: string; nextStop: string; prevStop: string; type: string; delay: number | null; platform: string }
+        return { kind: 'vehicle', name: p.name, type: p.type, destination: p.destination ?? '', nextStop: p.nextStop ?? '', prevStop: p.prevStop ?? '', delay: p.delay ?? undefined, platform: p.platform || undefined }
       })
 
       // ── Road traffic ──────────────────────────────────────────────────────────
@@ -270,6 +275,18 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
           description: p.description ?? '',
         }
       })
+
+      const updateBbox = () => {
+        const zoom = map.getZoom()
+        if (zoom >= 10) {
+          const b = map.getBounds()
+          setVehicleBbox({ minLon: b.getWest(), maxLon: b.getEast(), minLat: b.getSouth(), maxLat: b.getNorth() })
+        } else {
+          setVehicleBbox(undefined)
+        }
+      }
+      map.on('moveend', updateBbox)
+      map.on('zoomend', updateBbox)
 
       setMapReady(true)
     })
@@ -324,7 +341,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
         return {
           type: 'Feature',
           geometry: { type: 'Point', coordinates: cur },
-          properties: { id: v.id, name: v.name, type: v.type, destination: v.destination, nextStop: v.nextStop, prevStop: v.prevStop },
+          properties: { id: v.id, name: v.name, type: v.type, destination: v.destination, nextStop: v.nextStop, prevStop: v.prevStop, delay: v.delay ?? null, platform: v.platform ?? '' },
         }
       }),
     }
@@ -423,6 +440,9 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
                     {popupInfo.endPeriod && <p className="text-muted-foreground">Til: {popupInfo.endPeriod}</p>}
                   </div>
                 )}
+                {popupInfo.description && (
+                  <p className="pt-1.5 border-t border-border/40 text-muted-foreground text-xs leading-relaxed">{stripHtml(popupInfo.description)}</p>
+                )}
               </>
             ) : (
               <>
@@ -434,6 +454,18 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
                   <div className="pt-1.5 border-t border-border/40 space-y-1">
                     {popupInfo.prevStop && <p className="text-muted-foreground">Forrige: {popupInfo.prevStop}</p>}
                     {popupInfo.nextStop && <p className="text-foreground font-medium">Næste: {popupInfo.nextStop}</p>}
+                  </div>
+                )}
+                {(typeof popupInfo.delay === 'number' || popupInfo.platform) && (
+                  <div className="pt-1.5 border-t border-border/40 space-y-1">
+                    {typeof popupInfo.delay === 'number' && (
+                      <p className={popupInfo.delay > 0 ? 'text-red-400' : 'text-green-400'}>
+                        {popupInfo.delay > 0 ? `+${popupInfo.delay} min forsinkelse` : 'Til tiden'}
+                      </p>
+                    )}
+                    {popupInfo.platform && (
+                      <p className="text-muted-foreground">Spor/platform: <span className="text-foreground">{popupInfo.platform}</span></p>
+                    )}
                   </div>
                 )}
               </>
