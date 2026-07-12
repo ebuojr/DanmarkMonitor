@@ -9,7 +9,7 @@ import { SectionHeader } from '@/components/ui/section-header'
 
 export function DataSidebar() {
   return (
-    <aside className="flex flex-col h-full overflow-hidden border-l border-border shrink-0 w-full lg:w-80">
+    <aside className="flex flex-col h-full overflow-y-auto lg:overflow-hidden border-l border-border shrink-0 w-full lg:w-80">
       <div className="shrink-0 border-b border-border">
         <SectionHeader icon={Zap} label="Energi" />
         <div className="p-3">
@@ -24,7 +24,7 @@ export function DataSidebar() {
         </div>
       </div>
 
-      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-col shrink-0 min-h-56 lg:shrink lg:flex-1 lg:min-h-0 overflow-hidden">
         <SectionHeader icon={CloudSun} label="Vejr" />
         <div className="flex-1 overflow-y-auto p-3 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
           <WeatherWidget />
