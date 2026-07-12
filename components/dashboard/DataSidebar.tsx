@@ -24,7 +24,7 @@ export function DataSidebar() {
         </div>
       </div>
 
-      <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         <SectionHeader icon={CloudSun} label="Vejr" />
         <div className="flex-1 overflow-y-auto p-3 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
           <WeatherWidget />
