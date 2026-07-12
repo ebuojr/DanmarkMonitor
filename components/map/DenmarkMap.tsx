@@ -346,7 +346,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
       }),
     }
 
-    vehicles.forEach((v) => prev.set(v.id, [v.lon, v.lat]))
+    prevVehiclePositions.current = new Map(vehicles.map((v) => [v.id, [v.lon, v.lat] as [number, number]]))
     ;(map.getSource('vehicles') as maplibregl.GeoJSONSource).setData(vehicleGeoJSON)
     ;(map.getSource('vehicle-trails') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: trails })
   }, [mapReady, vehicleData])
