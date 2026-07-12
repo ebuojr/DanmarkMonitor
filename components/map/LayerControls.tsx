@@ -1,6 +1,6 @@
 'use client'
 
-import { Cloud, Zap, Train, AlertTriangle } from 'lucide-react'
+import { Cloud, Zap, Train, AlertTriangle, Plane } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LayerType } from './DenmarkMap'
 
@@ -9,6 +9,7 @@ const LAYERS: { id: LayerType; label: string; Icon: React.ComponentType<{ size?:
   { id: 'energy',      label: 'Energi',    Icon: Zap            },
   { id: 'transport',   label: 'Transport', Icon: Train          },
   { id: 'roadtraffic', label: 'Veje',      Icon: AlertTriangle  },
+  { id: 'flights',     label: 'Fly',       Icon: Plane          },
 ]
 
 interface Props {

@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import type { GeoJSON } from 'geojson'
-import { Wind, X, AlertTriangle } from 'lucide-react'
+import { Wind, X, AlertTriangle, Plane } from 'lucide-react'
 import { useWeather } from '@/lib/hooks/useWeather'
 import { useVehicles } from '@/lib/hooks/useVehicles'
 import { useJourney } from '@/lib/hooks/useJourney'
 import { useRoadTraffic } from '@/lib/hooks/useRoadTraffic'
+import { useFlights } from '@/lib/hooks/useFlights'
 import { WIND_TURBINES_GEOJSON } from '@/lib/data/wind-turbines'
 import { JourneyPanel } from '@/components/map/JourneyPanel'
 import type { VehicleType } from '@/lib/types/transport'
@@ -16,6 +17,7 @@ type PopupInfo =
   | { kind: 'turbine'; name: string; capacity_mw: number; turbines: number; year: number }
   | { kind: 'vehicle'; jid: string; name: string; type: VehicleType; destination: string }
   | { kind: 'road'; category: string; title: string; header: string; kommune: string; direction: string; beginPeriod: string; endPeriod: string; description: string }
+  | { kind: 'flight'; callsign: string; alt: number; speed: number }
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -48,7 +50,7 @@ const ROAD_CATEGORIES: { category: string; label: string; color: string }[] = [
   { category: 'winther-road',                label: 'Vintervej',             color: '#93c5fd' },
 ]
 
-export type LayerType = 'weather' | 'energy' | 'transport' | 'roadtraffic'
+export type LayerType = 'weather' | 'energy' | 'transport' | 'roadtraffic' | 'flights'
 export type MapStyle  = 'light' | 'dark' | 'satellite'
 
 interface Props {
@@ -147,6 +149,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
   const { data: vehicleData } = useVehicles(vehicleBbox)
   const { data: roadTrafficData } = useRoadTraffic()
   const { data: journeyData, isLoading: journeyLoading } = useJourney(selectedJid)
+  const { data: flightsData } = useFlights()
 
   // ── Init map once ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -318,6 +321,28 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
         }
       })
 
+      // ── Live aircraft — ADS-B positions over Denmark ──────────────────────
+      // The '✈' glyph is not present in the demotiles fontstack (renders as
+      // tofu/blank), so this ships as a circle layer — mirrors vehicle-circles.
+      map.addSource('flights', { type: 'geojson', data: EMPTY_FC })
+      map.addLayer({
+        id: 'flight-icons',
+        type: 'circle',
+        source: 'flights',
+        paint: {
+          'circle-radius': 4,
+          'circle-color': '#f472b6',
+          'circle-opacity': 0.82,
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': 'rgba(255,255,255,0.35)',
+        },
+      })
+
+      onLayerClick('flight-icons', 10, (f) => {
+        const p = f.properties as { id: string; callsign: string; alt: number; speed: number; heading: number }
+        return { kind: 'flight', callsign: p.callsign ?? '', alt: p.alt ?? 0, speed: p.speed ?? 0 }
+      })
+
       const updateBbox = () => {
         const zoom = map.getZoom()
         if (zoom >= 10) {
@@ -435,6 +460,21 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
     })
   }, [mapReady, roadTrafficData])
 
+  // ── Update live aircraft ───────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    const aircraft = flightsData?.data?.aircraft ?? []
+    ;(map.getSource('flights') as maplibregl.GeoJSONSource).setData({
+      type: 'FeatureCollection',
+      features: aircraft.map((a) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [a.lon, a.lat] },
+        properties: { id: a.id, callsign: a.callsign, alt: a.alt, speed: a.speed, heading: a.heading },
+      })),
+    })
+  }, [mapReady, flightsData])
+
   // ── Sync data layer visibility ─────────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current
@@ -447,6 +487,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
     vis('journey-route',   activeLayers.has('transport'))
     vis('journey-stops',   activeLayers.has('transport'))
     vis('road-circles',    activeLayers.has('roadtraffic'))
+    vis('flight-icons',    activeLayers.has('flights'))
   }, [mapReady, activeLayers])
 
   // ── Sync base tile layer ───────────────────────────────────────────────────
@@ -491,12 +532,16 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
             <div className="flex items-center gap-2">
               {popupInfo.kind === 'turbine' ? (
                 <Wind size={13} className="text-green-400 shrink-0" />
+              ) : popupInfo.kind === 'flight' ? (
+                <Plane size={13} className="text-pink-400 shrink-0" />
               ) : (
                 <AlertTriangle size={13} className="text-orange-400 shrink-0" />
               )}
               <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
                 {popupInfo.kind === 'turbine'
                   ? 'Vindmøllepark'
+                  : popupInfo.kind === 'flight'
+                  ? 'Fly'
                   : (ROAD_LABEL[popupInfo.category] ?? 'Trafikhændelse')}
               </span>
             </div>
@@ -510,6 +555,11 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
               <>
                 <p className="text-sm font-semibold text-foreground">{popupInfo.name}</p>
                 <p className="text-muted-foreground">{popupInfo.capacity_mw} MW &middot; {popupInfo.turbines} møller &middot; {popupInfo.year}</p>
+              </>
+            ) : popupInfo.kind === 'flight' ? (
+              <>
+                <p className="text-sm font-semibold text-foreground">{popupInfo.callsign}</p>
+                <p className="text-muted-foreground">{popupInfo.alt} ft &middot; {Math.round(popupInfo.speed)} kn</p>
               </>
             ) : (
               <>
