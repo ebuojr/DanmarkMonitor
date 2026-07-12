@@ -1,7 +1,6 @@
 import useSWR from 'swr'
 import type { WeatherResponse } from '@/lib/types/weather'
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+import { fetcher } from './fetcher'
 
 export function useWeather() {
   return useSWR<WeatherResponse>('/api/weather', fetcher, {

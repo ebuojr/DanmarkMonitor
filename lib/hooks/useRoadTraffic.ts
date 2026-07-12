@@ -1,7 +1,12 @@
 import useSWR from 'swr'
+import type { Feature } from 'geojson'
+import { fetcher } from './fetcher'
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+interface RoadTrafficResponse {
+  data: { features: Feature[] } | null
+  updatedAt: string
+}
 
 export function useRoadTraffic() {
-  return useSWR('/api/roadtraffic', fetcher, { refreshInterval: 60_000 })
+  return useSWR<RoadTrafficResponse>('/api/roadtraffic', fetcher, { refreshInterval: 60_000 })
 }

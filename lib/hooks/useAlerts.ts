@@ -1,7 +1,6 @@
 import useSWR from 'swr'
 import type { AlertsResponse } from '@/lib/types/alerts'
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+import { fetcher } from './fetcher'
 
 export function useAlerts() {
   return useSWR<AlertsResponse>('/api/alerts', fetcher, {

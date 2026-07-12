@@ -1,7 +1,6 @@
 import useSWR from 'swr'
 import type { PriceResponse } from '@/lib/types/prices'
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+import { fetcher } from './fetcher'
 
 export function usePrices() {
   return useSWR<PriceResponse>('/api/prices', fetcher, {

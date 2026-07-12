@@ -1,7 +1,6 @@
 import useSWR from 'swr'
 import type { EnergyResponse } from '@/lib/types/energy'
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+import { fetcher } from './fetcher'
 
 export function useEnergy() {
   return useSWR<EnergyResponse>('/api/energy', fetcher, {

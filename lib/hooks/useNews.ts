@@ -1,7 +1,6 @@
 import useSWR from 'swr'
 import type { NewsResponse } from '@/lib/types/news'
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+import { fetcher } from './fetcher'
 
 export function useNews() {
   return useSWR<NewsResponse>('/api/news', fetcher, {

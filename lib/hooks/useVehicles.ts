@@ -1,7 +1,6 @@
 import useSWR from 'swr'
 import type { VehicleResponse } from '@/lib/types/transport'
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+import { fetcher } from './fetcher'
 
 interface Bbox { minLon: number; maxLon: number; minLat: number; maxLat: number }
 
