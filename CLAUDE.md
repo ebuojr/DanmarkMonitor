@@ -12,12 +12,12 @@ React 19, TypeScript strict, Tailwind v4 (CSS-only config), SWR polling.
 ## Architecture map
 - `app/api/*/route.ts` — server-side proxies to public Danish APIs; response
   shape is always `{ data, error?, updatedAt }`, HTTP 200 or 500.
-- `lib/api/*` — upstream fetch + parse. HIGHEST-RISK CODE: positional-array
-  parsing (`rejseplanen-livemap.ts` — unofficial API; v[7]=destination,
-  v[9]=previous stop, v[11]=next stop, v[4] is a heading sector NOT delay;
-  verify with a live sample before changing field indexes), hand-rolled
-  UTM32→WGS84 in `app/api/roadtraffic/route.ts`, regex HTML scraping in
-  `wallnot.ts`.
+- `lib/api/*` — upstream fetch + parse. Vehicles and journeys come from
+  Rejseplanen's HAFAS mgate JSON endpoint via `lib/api/hafas.ts` (public web
+  `aid`, ver 1.24; `JourneyGeoPos` for live positions, `JourneyDetails` for
+  full routes; polyline is standard encoded, precision 5). HIGHEST-RISK CODE
+  otherwise: hand-rolled UTM32→WGS84 in `app/api/roadtraffic/route.ts`, regex
+  HTML scraping in `wallnot.ts`.
 - `lib/hooks/*` — thin SWR polling hooks; shared fetcher in `lib/hooks/fetcher.ts`
   throws on non-2xx.
 - `components/map/DenmarkMap.tsx` — all MapLibre sources/layers/popups.
