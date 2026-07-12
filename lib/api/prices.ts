@@ -20,8 +20,13 @@ async function fetchBilligKwh(sted: 'DK1' | 'DK2'): Promise<DayRecord[] | null> 
 
 function currentOere(records: DayRecord[]): { price: number | null; hourDK: string } {
   const now = new Date()
-  const todayPrefix = now.toISOString().slice(0, 10)
-  const hour = now.getUTCHours()
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Copenhagen',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
+  }).formatToParts(now)
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
+  const todayPrefix = `${get('year')}-${get('month')}-${get('day')}`
+  const hour = Number(get('hour')) % 24 // 'en-CA' with hour12:false can yield "24" at midnight
 
   const rec = records.find((r) => r.dato.startsWith(todayPrefix)) ?? records[0]
   if (!rec) return { price: null, hourDK: '' }
