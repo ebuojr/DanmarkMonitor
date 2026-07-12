@@ -21,6 +21,11 @@ React 19, TypeScript strict, Tailwind v4 (CSS-only config), SWR polling.
 - `lib/hooks/*` — thin SWR polling hooks; shared fetcher in `lib/hooks/fetcher.ts`
   throws on non-2xx.
 - `components/map/DenmarkMap.tsx` — all MapLibre sources/layers/popups.
+- Aircraft positions come from adsb.lol (`lib/api/adsb.ts`, public ADS-B
+  feed, no auth). The CPH arrivals/departures board comes from Copenhagen
+  Airport's own undocumented site API, `GetFlightInfoTable`
+  (`lib/api/cph.ts`) — treat as change-without-notice; note its `Destination`
+  field holds the *origin* city on arrivals (CPH reuses the field name).
 - Times/dates: upstream data is Europe/Copenhagen; never index hourly arrays
   with `getUTCHours()`.
 
