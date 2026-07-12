@@ -1,9 +1,10 @@
 'use client'
 
-import { Zap, CloudSun, TrendingUp } from 'lucide-react'
+import { Zap, CloudSun, TrendingUp, Plane } from 'lucide-react'
 import { EnergyWidget } from '@/components/widgets/EnergyWidget'
 import { WeatherWidget } from '@/components/widgets/WeatherWidget'
 import { PriceWidget } from '@/components/widgets/PriceWidget'
+import { FlightBoard } from '@/components/widgets/FlightBoard'
 
 function SectionHeader({ icon: Icon, label }: { icon: React.ComponentType<{ size?: number; className?: string }>; label: string }) {
   return (
@@ -37,6 +38,13 @@ export function DataSidebar() {
         <SectionHeader icon={CloudSun} label="Vejr" />
         <div className="flex-1 overflow-y-auto p-3 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
           <WeatherWidget />
+        </div>
+      </div>
+
+      <div className="shrink-0 border-t border-border">
+        <SectionHeader icon={Plane} label="København Lufthavn" />
+        <div className="p-3">
+          <FlightBoard />
         </div>
       </div>
     </aside>
