@@ -16,8 +16,13 @@ interface RawFlight {
   Status?: string
 }
 
+// Quantize the query window so the URL is stable across the fetch-cache
+// lifetime — Next's Data Cache keys on the full URL, so millisecond-precision
+// timestamps would guarantee a cache miss (and a CPH hit) on every request.
+const WINDOW_STEP_MS = 10 * 60 * 1000
+
 export async function fetchCphBoard(direction: 'A' | 'D'): Promise<BoardFlight[]> {
-  const now = Date.now()
+  const now = Math.floor(Date.now() / WINDOW_STEP_MS) * WINDOW_STEP_MS
   const startDateTime = new Date(now - 60 * 60 * 1000).toISOString()
   const endDateTime = new Date(now + 6 * 60 * 60 * 1000).toISOString()
 
