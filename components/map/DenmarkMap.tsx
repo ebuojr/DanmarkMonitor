@@ -112,6 +112,20 @@ const VEHICLE_COLOR_EXPR: any[] = [
   '#94a3b8',
 ]
 
+// Shared base paint values for the four dimmable circle/label layers — the
+// selection-emphasis effect restores these exact constants on deselect
+// instead of a second hardcoded copy that could drift from the layer defs.
+const BASE_CIRCLE_OPACITY = 0.82
+const DIMMED_OPACITY = 0.25
+const DIMMED_TEXT_OPACITY = 0.3
+// Zoom-interpolated radius shared by turbine/vehicle/road circles; reused
+// (not re-read from the live map) as the non-selected branch of the
+// emphasis effect's radius-bump expression so repeated selection changes
+// can't compound nested case-expressions.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const CIRCLE_RADIUS_EXPR: any[] = ['interpolate', ['linear'], ['zoom'], 5, 4, 9, 7, 12, 10]
+const FLIGHT_RADIUS = 4
+
 // Three base tile sets — light (CartoDB voyager), dark (CartoDB dark_all), satellite (ESRI)
 const MAP_BASE_STYLE: maplibregl.StyleSpecification = {
   version: 8,
@@ -161,6 +175,16 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
   const setSelectedRef = useRef(setSelected)
   useEffect(() => { setSelectedRef.current = setSelected }, [])
   const [vehicleBbox, setVehicleBbox] = useState<{ minLon: number; maxLon: number; minLat: number; maxLat: number } | undefined>(undefined)
+  // Camera as it was right before the FIRST selection in a run (vehicle or
+  // flight) — cleared (and restored to) on deselect. Saved synchronously
+  // inside selectVehicle/selectFlight (same tick as the click/focus flyTo,
+  // before any animation frame runs) so it captures the true pre-move
+  // camera rather than a mid-flight one.
+  const preSelectCamera = useRef<{ center: maplibregl.LngLat; zoom: number } | null>(null)
+  // "already fitBounds-ed for this selection" guard — keyed by kind+id so
+  // switching selections (or reselecting after a deselect) fits again, but
+  // data polls for the SAME selection don't re-fit.
+  const fittedKeyRef = useRef<string | null>(null)
 
   const { data: weatherData } = useWeather()
   const { data: vehicleData } = useVehicles(vehicleBbox)
@@ -173,10 +197,18 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
   // opens exactly what clicking the feature would. Refs keep these callable
   // from the map's `load` closure (registered once) without stale state.
   const selectVehicle = (jid: string, name: string, type: VehicleType, destination: string) => {
+    const map = mapRef.current
+    if (map && preSelectCamera.current === null) {
+      preSelectCamera.current = { center: map.getCenter(), zoom: map.getZoom() }
+    }
     setPopupRef.current({ kind: 'vehicle', jid, name, type, destination })
     setSelectedRef.current({ kind: 'vehicle', jid })
   }
   const selectFlight = (id: string) => {
+    const map = mapRef.current
+    if (map && preSelectCamera.current === null) {
+      preSelectCamera.current = { center: map.getCenter(), zoom: map.getZoom() }
+    }
     setPopupRef.current(null)
     setSelectedRef.current({ kind: 'flight', id })
   }
@@ -270,9 +302,9 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         type: 'circle',
         source: 'wind-turbines',
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 4, 9, 7, 12, 10],
+          'circle-radius': CIRCLE_RADIUS_EXPR,
           'circle-color': '#4ade80',
-          'circle-opacity': 0.82,
+          'circle-opacity': BASE_CIRCLE_OPACITY,
           'circle-stroke-width': 1.5,
           'circle-stroke-color': 'rgba(255,255,255,0.35)',
         },
@@ -289,7 +321,9 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         paint: {
           'line-color': ['get', 'color'],
           'line-width': 3.5,
-          'line-opacity': 0.85,
+          // Traveled portion (or the whole flight's origin->plane leg) full
+          // opacity; the portion ahead dims — set on features via `phase`.
+          'line-opacity': ['case', ['==', ['get', 'phase'], 'ahead'], 0.3, 0.9],
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       })
@@ -314,9 +348,9 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         type: 'circle',
         source: 'vehicles',
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 4, 9, 7, 12, 10],
+          'circle-radius': CIRCLE_RADIUS_EXPR,
           'circle-color': VEHICLE_COLOR_EXPR,
-          'circle-opacity': 0.82,
+          'circle-opacity': BASE_CIRCLE_OPACITY,
           'circle-stroke-width': 1.5,
           'circle-stroke-color': 'rgba(255,255,255,0.35)',
         },
@@ -353,9 +387,9 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         type: 'circle',
         source: 'road-traffic',
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 4, 9, 7, 12, 10],
+          'circle-radius': CIRCLE_RADIUS_EXPR,
           'circle-color': ROAD_COLOR_EXPR,
-          'circle-opacity': 0.82,
+          'circle-opacity': BASE_CIRCLE_OPACITY,
           'circle-stroke-width': 1.5,
           'circle-stroke-color': 'rgba(255,255,255,0.35)',
         },
@@ -384,9 +418,9 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         type: 'circle',
         source: 'flights',
         paint: {
-          'circle-radius': 4,
+          'circle-radius': FLIGHT_RADIUS,
           'circle-color': '#f472b6',
-          'circle-opacity': 0.82,
+          'circle-opacity': BASE_CIRCLE_OPACITY,
           'circle-stroke-width': 1.5,
           'circle-stroke-color': 'rgba(255,255,255,0.35)',
         },
@@ -456,10 +490,70 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     ;(map.getSource('vehicles') as maplibregl.GeoJSONSource).setData(vehicleGeoJSON)
   }, [mapReady, vehicleData])
 
+  // ── Camera restore on deselect ─────────────────────────────────────────────
+  // The save happens synchronously in selectVehicle/selectFlight (see above);
+  // this effect only handles the restore half, which has no flyTo-timing
+  // sensitivity. `preSelectCamera.current !== null` is what distinguishes a
+  // real deselect from mount (both have `selected === null` there, but no
+  // saved camera yet).
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    if (selected === null && preSelectCamera.current !== null) {
+      const { center, zoom } = preSelectCamera.current
+      map.easeTo({ center, zoom, duration: 600 })
+      preSelectCamera.current = null
+      fittedKeyRef.current = null
+    }
+  }, [mapReady, selected])
+
+  // ── Selection emphasis — dim everything else while something is selected ──
+  // The selected vehicle/flight's own layer keeps it at full opacity (+2px
+  // radius) while dimming its siblings via a case-expression; every other
+  // layer (turbines, roads, weather labels) dims uniformly. Deselecting
+  // restores the shared base constants — MapLibre has no "reset paint prop".
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+
+    if (selected !== null) {
+      map.setPaintProperty('turbine-circles', 'circle-opacity', DIMMED_OPACITY)
+      map.setPaintProperty('road-circles', 'circle-opacity', DIMMED_OPACITY)
+      map.setPaintProperty('weather-labels', 'text-opacity', DIMMED_TEXT_OPACITY)
+
+      const vehicleJid = selected.kind === 'vehicle' ? selected.jid : ''
+      map.setPaintProperty('vehicle-circles', 'circle-opacity', [
+        'case', ['==', ['get', 'jid'], vehicleJid], 1, DIMMED_OPACITY,
+      ])
+      map.setPaintProperty('vehicle-circles', 'circle-radius', [
+        'case', ['==', ['get', 'jid'], vehicleJid], ['+', CIRCLE_RADIUS_EXPR, 2], CIRCLE_RADIUS_EXPR,
+      ])
+
+      const flightId = selected.kind === 'flight' ? selected.id : ''
+      map.setPaintProperty('flight-icons', 'circle-opacity', [
+        'case', ['==', ['get', 'id'], flightId], 1, DIMMED_OPACITY,
+      ])
+      map.setPaintProperty('flight-icons', 'circle-radius', [
+        'case', ['==', ['get', 'id'], flightId], FLIGHT_RADIUS + 2, FLIGHT_RADIUS,
+      ])
+    } else {
+      map.setPaintProperty('turbine-circles', 'circle-opacity', BASE_CIRCLE_OPACITY)
+      map.setPaintProperty('road-circles', 'circle-opacity', BASE_CIRCLE_OPACITY)
+      map.setPaintProperty('weather-labels', 'text-opacity', 1)
+      map.setPaintProperty('vehicle-circles', 'circle-opacity', BASE_CIRCLE_OPACITY)
+      map.setPaintProperty('vehicle-circles', 'circle-radius', CIRCLE_RADIUS_EXPR)
+      map.setPaintProperty('flight-icons', 'circle-opacity', BASE_CIRCLE_OPACITY)
+      map.setPaintProperty('flight-icons', 'circle-radius', FLIGHT_RADIUS)
+    }
+  }, [mapReady, selected])
+
   // ── Update selected route (vehicle journey OR flight origin→plane→dest) ────
   // Both branches share the `journey-route` / `journey-stops` sources (they
   // are generic line+points sources) — a single effect owns both so they
-  // can never clobber each other.
+  // can never clobber each other. Each also fits the full route into view
+  // ONCE per selection (guarded by `fittedKeyRef`, keyed by kind+id) and
+  // splits the line into a traveled (`phase:'reached'`, full opacity) and
+  // ahead (`phase:'ahead'`, dimmed) portion.
   const FLIGHT_ROUTE_COLOR = '#f472b6'
 
   useEffect(() => {
@@ -471,6 +565,24 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource).setData(EMPTY_FC)
     }
 
+    // Fits the given coordinates into the visible map area, panel-aware —
+    // only called once per selection (see call sites' fittedKeyRef guard).
+    const fitToRoute = (coords: [number, number][]) => {
+      if (coords.length === 0) return
+      const bounds = coords.reduce(
+        (b, c) => b.extend(c),
+        new maplibregl.LngLatBounds()
+      )
+      const isMobile = window.innerWidth < 1024
+      map.fitBounds(bounds, {
+        padding: isMobile
+          ? { top: 96, bottom: 200, left: 32, right: 32 }
+          : { top: 96, bottom: 96, left: 336, right: 48 },
+        maxZoom: 11,
+        duration: 700,
+      })
+    }
+
     if (selected?.kind === 'vehicle') {
       const journey = journeyData?.data?.journey
       const selectedType = popupInfo?.kind === 'vehicle' ? popupInfo.type : 'other'
@@ -478,15 +590,54 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
 
       if (!journey) { clearRoute(); return }
 
-      ;(map.getSource('journey-route') as maplibregl.GeoJSONSource).setData({
-        type: 'FeatureCollection',
-        features: [
-          {
+      const selKey = `vehicle:${selected.jid}`
+
+      // Nearest-vertex split at the vehicle's live position (bbox-scoped
+      // `vehicleData`, so it may not include this vehicle — falls back to
+      // drawing the whole line as "ahead" when unavailable).
+      const vehicle = vehicleData?.data?.vehicles.find((v) => v.jid === selected.jid)
+      let splitIndex = -1
+      if (vehicle) {
+        let bestDist = Infinity
+        journey.line.forEach(([lon, lat], i) => {
+          const dLon = lon - vehicle.lon
+          const dLat = lat - vehicle.lat
+          const d = dLon * dLon + dLat * dLat
+          if (d < bestDist) { bestDist = d; splitIndex = i }
+        })
+      }
+
+      const routeFeatures: GeoJSON.Feature[] = []
+      if (splitIndex === -1) {
+        if (journey.line.length >= 2) {
+          routeFeatures.push({
             type: 'Feature',
             geometry: { type: 'LineString', coordinates: journey.line },
-            properties: { color },
-          },
-        ],
+            properties: { color, phase: 'ahead' },
+          })
+        }
+      } else {
+        const reached = journey.line.slice(0, splitIndex + 1)
+        const ahead = journey.line.slice(splitIndex)
+        if (reached.length >= 2) {
+          routeFeatures.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: reached },
+            properties: { color, phase: 'reached' },
+          })
+        }
+        if (ahead.length >= 2) {
+          routeFeatures.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: ahead },
+            properties: { color, phase: 'ahead' },
+          })
+        }
+      }
+
+      ;(map.getSource('journey-route') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features: routeFeatures,
       })
       ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource).setData({
         type: 'FeatureCollection',
@@ -496,6 +647,11 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
           properties: { name: s.name, color },
         })),
       })
+
+      if (fittedKeyRef.current !== selKey) {
+        fitToRoute(journey.line)
+        fittedKeyRef.current = selKey
+      }
       return
     }
 
@@ -510,6 +666,8 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         return
       }
 
+      const selKey = `flight:${selected.id}`
+
       ;(map.getSource('journey-route') as maplibregl.GeoJSONSource).setData({
         type: 'FeatureCollection',
         features: [
@@ -520,10 +678,20 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
               coordinates: [
                 [aircraft.origin.lon, aircraft.origin.lat],
                 [aircraft.lon, aircraft.lat],
+              ],
+            },
+            properties: { color: FLIGHT_ROUTE_COLOR, phase: 'reached' },
+          },
+          {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [aircraft.lon, aircraft.lat],
                 [aircraft.destination.lon, aircraft.destination.lat],
               ],
             },
-            properties: { color: FLIGHT_ROUTE_COLOR },
+            properties: { color: FLIGHT_ROUTE_COLOR, phase: 'ahead' },
           },
         ],
       })
@@ -542,11 +710,20 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
           },
         ],
       })
+
+      if (fittedKeyRef.current !== selKey) {
+        fitToRoute([
+          [aircraft.origin.lon, aircraft.origin.lat],
+          [aircraft.lon, aircraft.lat],
+          [aircraft.destination.lon, aircraft.destination.lat],
+        ])
+        fittedKeyRef.current = selKey
+      }
       return
     }
 
     clearRoute()
-  }, [mapReady, selected, journeyData, flightsData, popupInfo])
+  }, [mapReady, selected, journeyData, flightsData, popupInfo, vehicleData])
 
   // ── Update road traffic ───────────────────────────────────────────────────
   useEffect(() => {
