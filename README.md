@@ -13,7 +13,6 @@ Real-time situational awareness dashboard for Denmark. Live map with weather, en
 - **Spot prices** — DK1 (vest) and DK2 (øst) electricity spot prices in øre/kWh via billigkwh.dk
 - **Stocks** — OMXC25 index and major Danish equities (Novo Nordisk, Mærsk, DSV, Ørsted, Carlsberg)
 - **News** — Cycling headlines from Danish outlets (wallnot.dk) in the bottom bar, full feed in the left sidebar
-- **Storebælt camera** — Live HLS stream of the Great Belt Bridge (two camera angles)
 
 ## Map modes
 
