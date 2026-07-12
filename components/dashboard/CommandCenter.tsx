@@ -2,9 +2,8 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Sun, Moon, Globe, Map, Newspaper, BarChart2 as BarChart2Icon, Search } from 'lucide-react'
-import { InfoSidebar } from './InfoSidebar'
-import { DataSidebar } from './DataSidebar'
+import { Sun, Moon, Globe, Map, PanelRight, Search } from 'lucide-react'
+import { Sidebar } from './Sidebar'
 import { NewsTicker } from './NewsTicker'
 import type { LayerType, MapStyle, DenmarkMapHandle } from '@/components/map/DenmarkMap'
 import { LayerControls } from '@/components/map/LayerControls'
@@ -17,7 +16,7 @@ const DenmarkMap = dynamic(() => import('@/components/map/DenmarkMap').then((m) 
   loading: () => <div className="size-full bg-background" />,
 })
 
-type MobileTab = 'map' | 'left' | 'right'
+type MobileTab = 'map' | 'info'
 
 const DEFAULT_LAYERS: Set<LayerType> = new Set(['weather', 'energy', 'transport', 'roadtraffic', 'flights'])
 
@@ -150,10 +149,6 @@ export function CommandCenter() {
 
       {/* Main content */}
       <main className="flex flex-1 min-h-0 overflow-hidden">
-        <div className={cn('h-full', mobileTab === 'left' ? 'flex' : 'hidden', 'lg:flex')}>
-          <InfoSidebar />
-        </div>
-
         <div className={cn('flex-1 min-w-0 relative flex-col', mobileTab === 'map' ? 'flex' : 'hidden', 'lg:flex')}>
           {/* Mobile-only map controls bar */}
           <div className="lg:hidden shrink-0 flex items-center justify-between gap-2 px-3 py-1.5 border-b border-border bg-background/90 backdrop-blur-sm">
@@ -177,20 +172,13 @@ export function CommandCenter() {
           <DenmarkMap ref={mapHandle} activeLayers={activeLayers} mapStyle={mapStyle} />
         </div>
 
-        <div className={cn('h-full', mobileTab === 'right' ? 'flex' : 'hidden', 'lg:flex')}>
-          <DataSidebar />
+        <div className={cn('h-full', mobileTab === 'info' ? 'flex' : 'hidden', 'lg:flex')}>
+          <Sidebar />
         </div>
       </main>
 
       {/* Mobile tab bar */}
       <nav className="lg:hidden shrink-0 flex border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
-        <button
-          onClick={() => setMobileTab('left')}
-          className={cn('flex flex-1 flex-col items-center justify-center min-h-11 py-2 gap-0.5 text-[10px] font-medium transition-colors', mobileTab === 'left' ? 'text-primary' : 'text-muted-foreground')}
-        >
-          <Newspaper size={16} />
-          Nyheder
-        </button>
         <button
           onClick={() => setMobileTab('map')}
           className={cn('flex flex-1 flex-col items-center justify-center min-h-11 py-2 gap-0.5 text-[10px] font-medium transition-colors', mobileTab === 'map' ? 'text-primary' : 'text-muted-foreground')}
@@ -199,11 +187,11 @@ export function CommandCenter() {
           Kort
         </button>
         <button
-          onClick={() => setMobileTab('right')}
-          className={cn('flex flex-1 flex-col items-center justify-center min-h-11 py-2 gap-0.5 text-[10px] font-medium transition-colors', mobileTab === 'right' ? 'text-primary' : 'text-muted-foreground')}
+          onClick={() => setMobileTab('info')}
+          className={cn('flex flex-1 flex-col items-center justify-center min-h-11 py-2 gap-0.5 text-[10px] font-medium transition-colors', mobileTab === 'info' ? 'text-primary' : 'text-muted-foreground')}
         >
-          <BarChart2Icon size={16} />
-          Data
+          <PanelRight size={16} />
+          Info
         </button>
       </nav>
 

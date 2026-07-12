@@ -1,0 +1,62 @@
+'use client'
+
+import { Plane, Zap, TrendingUp, BarChart2, Newspaper, CloudSun } from 'lucide-react'
+import { FlightBoard } from '@/components/widgets/FlightBoard'
+import { EnergyWidget } from '@/components/widgets/EnergyWidget'
+import { PriceWidget } from '@/components/widgets/PriceWidget'
+import { StocksWidget } from '@/components/widgets/StocksWidget'
+import { NewsWidget } from '@/components/widgets/NewsWidget'
+import { WeatherWidget } from '@/components/widgets/WeatherWidget'
+import { SectionHeader } from '@/components/ui/section-header'
+
+export function Sidebar() {
+  return (
+    <aside className="flex flex-col h-full overflow-y-auto border-l border-border shrink-0 w-full lg:w-96">
+      {/* Airports */}
+      <div className="shrink-0 border-b border-border">
+        <SectionHeader icon={Plane} label="Lufthavne" />
+        <div className="p-3">
+          <FlightBoard />
+        </div>
+      </div>
+
+      {/* Energy */}
+      <div className="shrink-0 border-b border-border">
+        <SectionHeader icon={Zap} label="Energi" />
+        <div className="p-3">
+          <EnergyWidget />
+        </div>
+      </div>
+
+      {/* Spot price */}
+      <div className="shrink-0 border-b border-border">
+        <SectionHeader icon={TrendingUp} label="Spotpris" />
+        <div className="p-3">
+          <PriceWidget />
+        </div>
+      </div>
+
+      {/* Stocks */}
+      <div className="shrink-0 border-b border-border">
+        <SectionHeader icon={BarChart2} label="Danske Aktier" />
+        <StocksWidget />
+      </div>
+
+      {/* News */}
+      <div className="shrink-0 border-b border-border">
+        <SectionHeader icon={Newspaper} label="Nyheder" />
+        <div className="py-1">
+          <NewsWidget />
+        </div>
+      </div>
+
+      {/* Weather */}
+      <div className="shrink-0 border-b border-border">
+        <SectionHeader icon={CloudSun} label="Vejr" />
+        <div className="p-3">
+          <WeatherWidget />
+        </div>
+      </div>
+    </aside>
+  )
+}
