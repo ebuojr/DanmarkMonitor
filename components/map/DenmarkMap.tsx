@@ -84,16 +84,6 @@ const VEHICLE_COLOR_EXPR: any[] = [
   '#94a3b8',
 ]
 
-function computeBearing(from: [number, number], to: [number, number]): number {
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const [lon1, lat1] = from.map(toRad)
-  const [lon2, lat2] = to.map(toRad)
-  const dLon = lon2 - lon1
-  const x = Math.sin(dLon) * Math.cos(lat2)
-  const y = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
-  return (Math.atan2(x, y) * (180 / Math.PI) + 360) % 360
-}
-
 // Three base tile sets — light (CartoDB voyager), dark (CartoDB dark_all), satellite (ESRI)
 const MAP_BASE_STYLE: maplibregl.StyleSpecification = {
   version: 8,
@@ -527,7 +517,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
       )}
 
       {popupInfo && popupInfo.kind !== 'vehicle' && (
-        <div className="absolute top-3 left-3 z-20 w-64 rounded-lg bg-background border border-border shadow-lg overflow-hidden">
+        <div className="absolute top-3 left-3 z-20 w-64 max-w-[calc(100vw-1.5rem)] rounded-lg bg-background border border-border shadow-lg overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/60 bg-muted/30">
             <div className="flex items-center gap-2">
               {popupInfo.kind === 'turbine' ? (

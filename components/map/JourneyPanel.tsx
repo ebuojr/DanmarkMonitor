@@ -38,7 +38,7 @@ export function JourneyPanel({ name, type, destination, journey, isLoading, onCl
   const color = TYPE_COLOR[type] ?? TYPE_COLOR.other
 
   return (
-    <Card className="w-72 shadow-lg gap-0 py-0">
+    <Card className="w-72 max-w-[calc(100vw-1.5rem)] shadow-lg gap-0 py-0">
       <CardHeader className="px-3 py-2.5 border-b border-border/60 bg-muted/30 rounded-t-xl">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -75,7 +75,7 @@ export function JourneyPanel({ name, type, destination, journey, isLoading, onCl
         ) : !journey || journey.stops.length === 0 ? (
           <p className="text-xs text-muted-foreground">Rute utilgængelig</p>
         ) : (
-          <ScrollArea className="h-56">
+          <ScrollArea className="h-56 max-h-[40vh]">
             <div className="relative pl-1 pr-2">
               <div
                 className="absolute left-[6.5px] top-3 bottom-3 border-l"

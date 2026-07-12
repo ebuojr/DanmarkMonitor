@@ -143,24 +143,24 @@ export function CommandCenter() {
       </main>
 
       {/* Mobile tab bar */}
-      <nav className="lg:hidden shrink-0 flex border-t border-border bg-background">
+      <nav className="lg:hidden shrink-0 flex border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
         <button
           onClick={() => setMobileTab('left')}
-          className={cn('flex flex-1 flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium transition-colors', mobileTab === 'left' ? 'text-foreground' : 'text-muted-foreground')}
+          className={cn('flex flex-1 flex-col items-center justify-center min-h-11 py-2 gap-0.5 text-[10px] font-medium transition-colors', mobileTab === 'left' ? 'text-primary' : 'text-muted-foreground')}
         >
           <Newspaper size={16} />
           Nyheder
         </button>
         <button
           onClick={() => setMobileTab('map')}
-          className={cn('flex flex-1 flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium transition-colors', mobileTab === 'map' ? 'text-foreground' : 'text-muted-foreground')}
+          className={cn('flex flex-1 flex-col items-center justify-center min-h-11 py-2 gap-0.5 text-[10px] font-medium transition-colors', mobileTab === 'map' ? 'text-primary' : 'text-muted-foreground')}
         >
           <Map size={16} />
           Kort
         </button>
         <button
           onClick={() => setMobileTab('right')}
-          className={cn('flex flex-1 flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium transition-colors', mobileTab === 'right' ? 'text-foreground' : 'text-muted-foreground')}
+          className={cn('flex flex-1 flex-col items-center justify-center min-h-11 py-2 gap-0.5 text-[10px] font-medium transition-colors', mobileTab === 'right' ? 'text-primary' : 'text-muted-foreground')}
         >
           <BarChart2Icon size={16} />
           Data
