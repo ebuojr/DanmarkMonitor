@@ -1,7 +1,19 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
 @import "maplibre-gl/dist/maplibre-gl.css";
+
+/* Inlined from shadcn/tailwind.css (only variants this codebase uses) */
+@custom-variant data-horizontal {
+  &:where([data-orientation="horizontal"]) {
+    @slot;
+  }
+}
+
+@custom-variant data-vertical {
+  &:where([data-orientation="vertical"]) {
+    @slot;
+  }
+}
 
 @custom-variant dark (&:is(.dark *));
 
