@@ -10,6 +10,7 @@ import type { Vehicle } from '@/lib/types/transport'
 const cache = new Map<string, { at: number; vehicles: Vehicle[]; updatedAt: string }>()
 const TTL_MS = 15_000
 const PRUNE_AGE_MS = 5 * 60_000
+const MAX_ENTRIES = 50
 
 export async function GET(request: Request) {
   const updatedAt = new Date().toISOString()
@@ -41,6 +42,13 @@ export async function GET(request: Request) {
     // so without this the map is a slow memory leak.
     for (const [k, v] of cache) {
       if (now - v.at > PRUNE_AGE_MS) cache.delete(k)
+    }
+    // Hard size cap: varied attacker-controlled bboxes could otherwise grow
+    // the map arbitrarily within the prune window. Evict oldest-inserted.
+    while (cache.size >= MAX_ENTRIES) {
+      const oldest = cache.keys().next().value
+      if (oldest === undefined) break
+      cache.delete(oldest)
     }
     cache.set(key, { at: now, vehicles, updatedAt })
     return NextResponse.json({ data: { vehicles, updatedAt }, updatedAt })
