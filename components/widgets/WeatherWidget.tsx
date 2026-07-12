@@ -2,6 +2,7 @@
 
 import { useWeather } from '@/lib/hooks/useWeather'
 import type { WeatherStation } from '@/lib/types/weather'
+import { WidgetSkeleton, WidgetError } from '@/components/ui/widget-state'
 
 const MAJOR_CITIES = [
   { name: 'København', lat: 55.676, lon: 12.569 },
@@ -21,23 +22,14 @@ function nearestStation(stations: WeatherStation[], lat: number, lon: number): W
 }
 
 export function WeatherWidget() {
-  const { data, isLoading } = useWeather()
+  const { data, isLoading, error } = useWeather()
 
   if (isLoading) {
-    return (
-      <div className="space-y-2 animate-pulse">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex justify-between">
-            <div className="h-3 bg-muted rounded w-1/3" />
-            <div className="h-3 bg-muted rounded w-1/5" />
-          </div>
-        ))}
-      </div>
-    )
+    return <WidgetSkeleton lines={5} />
   }
 
-  if (!data?.data || data.error) {
-    return <p className="text-xs text-muted-foreground">Vejrdata utilgængelig</p>
+  if (error || !data?.data) {
+    return <WidgetError label="Vejrdata utilgængelig" />
   }
 
   const { stations, warnings } = data.data

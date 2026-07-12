@@ -2,6 +2,7 @@
 
 import { useEnergy } from '@/lib/hooks/useEnergy'
 import { cn } from '@/lib/utils'
+import { WidgetSkeleton, WidgetError } from '@/components/ui/widget-state'
 
 const SOURCES = [
   { key: 'wind' as const, label: 'Vind', color: 'bg-sky-400' },
@@ -15,21 +16,11 @@ export function EnergyWidget() {
   const { data, isLoading, error } = useEnergy()
 
   if (isLoading) {
-    return (
-      <div className="space-y-2 animate-pulse">
-        <div className="h-4 bg-muted rounded w-2/3" />
-        <div className="h-3 bg-muted rounded w-1/2" />
-        <div className="h-8 bg-muted rounded mt-3" />
-      </div>
-    )
+    return <WidgetSkeleton lines={3} />
   }
 
   if (error || !data?.data) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        {data?.error ?? 'Energidata utilgængelig'}
-      </p>
-    )
+    return <WidgetError label={data?.error ?? 'Energidata utilgængelig'} />
   }
 
   const { production, co2, renewablesPct } = data.data

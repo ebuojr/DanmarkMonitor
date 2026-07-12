@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAirportBoard } from '@/lib/hooks/useAirportBoard'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
+import { WidgetSkeleton, WidgetError } from '@/components/ui/widget-state'
 
 const DIRECTIONS: { id: 'D' | 'A'; label: string }[] = [
   { id: 'D', label: 'Afgange' },
@@ -16,7 +17,7 @@ function formatTime(iso: string): string {
 
 export function FlightBoard() {
   const [direction, setDirection] = useState<'A' | 'D'>('D')
-  const { data, isLoading } = useAirportBoard(direction)
+  const { data, isLoading, error } = useAirportBoard(direction)
 
   return (
     <div className="space-y-2">
@@ -38,15 +39,11 @@ export function FlightBoard() {
       </div>
 
       {isLoading ? (
-        <div className="space-y-2 animate-pulse">
-          <div className="h-4 bg-muted rounded w-3/4" />
-          <div className="h-3 bg-muted rounded w-1/2" />
-          <div className="h-3 bg-muted rounded w-2/3" />
-        </div>
-      ) : !data?.data?.flights.length ? (
-        <p className="text-xs text-muted-foreground">
-          {data?.error ? 'Flydata utilgængelig' : 'Ingen fly i vinduet'}
-        </p>
+        <WidgetSkeleton lines={3} />
+      ) : error || !data?.data ? (
+        <WidgetError label="Flydata utilgængelig" />
+      ) : !data.data.flights.length ? (
+        <p className="text-xs text-muted-foreground">Ingen fly i vinduet</p>
       ) : (
         <ScrollArea className="h-56">
           <ul className="space-y-2 pr-2">

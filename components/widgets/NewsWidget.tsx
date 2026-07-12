@@ -2,6 +2,7 @@
 
 import { useNews } from '@/lib/hooks/useNews'
 import type { Article } from '@/lib/types/news'
+import { WidgetSkeleton, WidgetError } from '@/components/ui/widget-state'
 
 function ArticleRow({ article }: { article: Article }) {
   const time = new Date(article.pubDate).toLocaleTimeString('da-DK', {
@@ -36,20 +37,18 @@ export function NewsWidget() {
 
   if (isLoading) {
     return (
-      <div className="space-y-2 animate-pulse px-2">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="space-y-1">
-            <div className="h-3 bg-muted rounded w-full" />
-            <div className="h-3 bg-muted rounded w-4/5" />
-            <div className="h-2 bg-muted rounded w-1/3" />
-          </div>
-        ))}
+      <div className="px-2">
+        <WidgetSkeleton lines={5} />
       </div>
     )
   }
 
   if (error || !data?.data) {
-    return <p className="px-2 text-xs text-muted-foreground">Nyheder utilgængelige</p>
+    return (
+      <div className="px-2">
+        <WidgetError label="Nyheder utilgængelige" />
+      </div>
+    )
   }
 
   return (

@@ -2,17 +2,24 @@
 
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { useStocks } from '@/lib/hooks/useStocks'
+import { WidgetSkeleton, WidgetError } from '@/components/ui/widget-state'
 
 export function StocksWidget() {
-  const { data, isLoading } = useStocks()
+  const { data, isLoading, error } = useStocks()
   const stocks = data?.data?.stocks ?? []
 
   if (isLoading) {
     return (
-      <div className="space-y-2 px-3 py-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-8 rounded bg-muted/40 animate-pulse" />
-        ))}
+      <div className="px-3 py-2">
+        <WidgetSkeleton lines={4} />
+      </div>
+    )
+  }
+
+  if (error || !data?.data) {
+    return (
+      <div className="px-3 py-3">
+        <WidgetError label="Aktier utilgængelige" />
       </div>
     )
   }

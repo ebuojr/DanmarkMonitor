@@ -1,27 +1,23 @@
 'use client'
 
 import { usePrices } from '@/lib/hooks/usePrices'
+import { WidgetSkeleton, WidgetError } from '@/components/ui/widget-state'
 
 export function PriceWidget() {
-  const { data, isLoading } = usePrices()
+  const { data, isLoading, error } = usePrices()
 
   if (isLoading) {
-    return (
-      <div className="space-y-2 animate-pulse">
-        <div className="h-4 bg-muted rounded w-3/4" />
-        <div className="h-3 bg-muted rounded w-1/2" />
-      </div>
-    )
+    return <WidgetSkeleton lines={2} />
   }
 
-  const priceData = data?.data
+  if (error || !data?.data) {
+    return <WidgetError label="Prisdata utilgængelig" />
+  }
 
-  if (!priceData?.current) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        {data?.error ? 'Prisdata utilgængelig' : 'Ingen aktuelle prisdata'}
-      </p>
-    )
+  const priceData = data.data
+
+  if (!priceData.current) {
+    return <WidgetError label="Ingen aktuelle prisdata" />
   }
 
   const { dk1, dk2, hourDK } = priceData.current
