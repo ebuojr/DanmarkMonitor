@@ -1,13 +1,19 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { Moon, Globe, Map, Bell, BarChart2 as BarChart2Icon } from 'lucide-react'
 import { AlertsSidebar } from './AlertsSidebar'
 import { DataSidebar } from './DataSidebar'
 import { NewsTicker } from './NewsTicker'
-import { DenmarkMap, type LayerType, type MapStyle } from '@/components/map/DenmarkMap'
+import type { LayerType, MapStyle } from '@/components/map/DenmarkMap'
 import { LayerControls } from '@/components/map/LayerControls'
 import { cn } from '@/lib/utils'
+
+const DenmarkMap = dynamic(() => import('@/components/map/DenmarkMap').then((m) => m.DenmarkMap), {
+  ssr: false,
+  loading: () => <div className="size-full bg-background" />,
+})
 
 type MobileTab = 'map' | 'left' | 'right'
 
