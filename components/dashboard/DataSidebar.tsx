@@ -5,17 +5,7 @@ import { EnergyWidget } from '@/components/widgets/EnergyWidget'
 import { WeatherWidget } from '@/components/widgets/WeatherWidget'
 import { PriceWidget } from '@/components/widgets/PriceWidget'
 import { FlightBoard } from '@/components/widgets/FlightBoard'
-
-function SectionHeader({ icon: Icon, label }: { icon: React.ComponentType<{ size?: number; className?: string }>; label: string }) {
-  return (
-    <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50">
-      <Icon size={13} className="text-muted-foreground shrink-0" />
-      <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-        {label}
-      </span>
-    </div>
-  )
-}
+import { SectionHeader } from '@/components/ui/section-header'
 
 export function DataSidebar() {
   return (
