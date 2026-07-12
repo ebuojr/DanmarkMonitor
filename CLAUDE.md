@@ -61,6 +61,13 @@ React 19, TypeScript strict, Tailwind v4 (CSS-only config), SWR polling.
     fetcher-per-airport pattern above.
 - Times/dates: upstream data is Europe/Copenhagen; never index hourly arrays
   with `getUTCHours()`.
+- Global search (`⌘K`/`Ctrl+K`, `components/search/*`) runs client-side over
+  data the app already holds — `useSearchIndex.ts` assembles the corpus
+  (vehicles/flights/turbines/road traffic/airports/news) and `SearchModal.tsx`
+  renders it; selecting a result drives `DenmarkMap`'s imperative
+  `DenmarkMapHandle.focus()` (exposed via `forwardRef`/`useImperativeHandle`),
+  which reuses the same click-handler selection logic so a search result
+  opens exactly what clicking the feature on the map would.
 
 ## Conventions
 - Conventional commits (`feat:`/`fix:`/`chore:`).

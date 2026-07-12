@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import type { GeoJSON } from 'geojson'
 import { Wind, X, AlertTriangle } from 'lucide-react'
@@ -14,15 +14,38 @@ import { JourneyPanel } from '@/components/map/JourneyPanel'
 import { FlightPanel } from '@/components/map/FlightPanel'
 import type { VehicleType } from '@/lib/types/transport'
 
+type TurbineProps = { name: string; capacity_mw: number; turbines: number; year: number }
+type RoadProps = { category: string; title: string; header: string; kommune: string; direction: string; beginPeriod: string; endPeriod: string; description: string }
+
 type PopupInfo =
-  | { kind: 'turbine'; name: string; capacity_mw: number; turbines: number; year: number }
+  | ({ kind: 'turbine' } & TurbineProps)
   | { kind: 'vehicle'; jid: string; name: string; type: VehicleType; destination: string }
-  | { kind: 'road'; category: string; title: string; header: string; kommune: string; direction: string; beginPeriod: string; endPeriod: string; description: string }
+  | ({ kind: 'road' } & RoadProps)
 
 // One selection at a time — clicking a vehicle or a flight clears the other;
 // closing the popup clears this too. This is the extension point future
 // programmatic-selection features (e.g. search) will drive.
 type Selected = { kind: 'vehicle'; jid: string } | { kind: 'flight'; id: string } | null
+
+// Search (and any future programmatic caller) drives the map through this
+// single handle — same PopupInfo/`selected` state the click handlers set, so
+// selecting a search result opens exactly what clicking the feature would.
+// Vehicle targets carry name/type/destination directly (not just an id)
+// because the map's own vehicle data is viewport-scoped (`useVehicles(bbox)`)
+// — a focus-time lookup by id would miss anything outside the current view,
+// which is the common case right after a search. Flights don't need this:
+// `useFlights()` is unscoped, so the flight branch below re-derives live
+// aircraft data from it by id, same as the existing click handler does.
+export type FocusTarget =
+  | { kind: 'vehicle'; jid: string; lon: number; lat: number; name: string; type: VehicleType; destination: string }
+  | { kind: 'flight'; id: string; lon: number; lat: number }
+  | { kind: 'turbine'; lon: number; lat: number; props: TurbineProps }
+  | { kind: 'road'; lon: number; lat: number; props: RoadProps }
+  | { kind: 'point'; lon: number; lat: number; zoom?: number }
+
+export interface DenmarkMapHandle {
+  focus(target: FocusTarget): void
+}
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -127,7 +150,7 @@ const MAP_BASE_STYLE: maplibregl.StyleSpecification = {
   ],
 }
 
-export function DenmarkMap({ activeLayers, mapStyle }: Props) {
+export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMap({ activeLayers, mapStyle }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [mapReady, setMapReady] = useState(false)
@@ -144,6 +167,60 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
   const { data: roadTrafficData } = useRoadTraffic()
   const { data: journeyData, isLoading: journeyLoading } = useJourney(selected?.kind === 'vehicle' ? selected.jid : null)
   const { data: flightsData } = useFlights()
+
+  // ── Shared selection helpers — click handlers AND focus() (the search
+  // modal's entry point) both funnel through these, so selecting a result
+  // opens exactly what clicking the feature would. Refs keep these callable
+  // from the map's `load` closure (registered once) without stale state.
+  const selectVehicle = (jid: string, name: string, type: VehicleType, destination: string) => {
+    setPopupRef.current({ kind: 'vehicle', jid, name, type, destination })
+    setSelectedRef.current({ kind: 'vehicle', jid })
+  }
+  const selectFlight = (id: string) => {
+    setPopupRef.current(null)
+    setSelectedRef.current({ kind: 'flight', id })
+  }
+  const selectTurbine = (props: TurbineProps) => {
+    setPopupRef.current({ kind: 'turbine', ...props })
+    setSelectedRef.current(null)
+  }
+  const selectRoad = (props: RoadProps) => {
+    setPopupRef.current({ kind: 'road', ...props })
+    setSelectedRef.current(null)
+  }
+
+  useImperativeHandle(ref, () => ({
+    focus(target) {
+      const map = mapRef.current
+      if (!map) return
+      const flyTo = (lon: number, lat: number, zoom: number) =>
+        map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), zoom), duration: 700, essential: true })
+
+      switch (target.kind) {
+        case 'vehicle':
+          flyTo(target.lon, target.lat, 13)
+          selectVehicle(target.jid, target.name, target.type, target.destination)
+          break
+        case 'flight':
+          flyTo(target.lon, target.lat, 9)
+          selectFlight(target.id)
+          break
+        case 'turbine':
+          flyTo(target.lon, target.lat, 10)
+          selectTurbine(target.props)
+          break
+        case 'road':
+          flyTo(target.lon, target.lat, 12)
+          selectRoad(target.props)
+          break
+        case 'point':
+          map.flyTo({ center: [target.lon, target.lat], zoom: target.zoom ?? 11, duration: 700, essential: true })
+          setPopupRef.current(null)
+          setSelectedRef.current(null)
+          break
+      }
+    },
+  }), [])
 
   // ── Init map once ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -261,14 +338,12 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
 
       onLayerClick('turbine-circles', 8, (f) => {
         const p = f.properties as { name: string; capacity_mw: number; turbines: number; year: number }
-        setPopupRef.current({ kind: 'turbine', name: p.name, capacity_mw: p.capacity_mw, turbines: p.turbines, year: p.year })
-        setSelectedRef.current(null)
+        selectTurbine({ name: p.name, capacity_mw: p.capacity_mw, turbines: p.turbines, year: p.year })
       })
 
       onLayerClick('vehicle-circles', 9, (f) => {
         const p = f.properties as { jid: string; name: string; destination: string; type: VehicleType }
-        setPopupRef.current({ kind: 'vehicle', jid: p.jid, name: p.name, type: p.type, destination: p.destination ?? '' })
-        setSelectedRef.current({ kind: 'vehicle', jid: p.jid })
+        selectVehicle(p.jid, p.name, p.type, p.destination ?? '')
       })
 
       // ── Road traffic ──────────────────────────────────────────────────────────
@@ -288,8 +363,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
 
       onLayerClick('road-circles', 9, (f) => {
         const p = f.properties as { category: string; title: string; header: string; kommune: string; direction: string; beginPeriod: string; endPeriod: string; description: string }
-        setPopupRef.current({
-          kind: 'road',
+        selectRoad({
           category: p.category ?? '',
           title: p.title ?? '',
           header: p.header ?? '',
@@ -299,7 +373,6 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
           endPeriod: p.endPeriod ?? '',
           description: p.description ?? '',
         })
-        setSelectedRef.current(null)
       })
 
       // ── Live aircraft — ADS-B positions over Denmark ──────────────────────
@@ -325,8 +398,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
         // `selected` + a live lookup into the flights SWR data (so it always
         // reflects the aircraft's current position/alt/speed, not a stale
         // click-time snapshot).
-        setPopupRef.current(null)
-        setSelectedRef.current({ kind: 'flight', id: p.id ?? '' })
+        selectFlight(p.id ?? '')
       })
 
       const updateBbox = () => {
@@ -660,4 +732,4 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
       )}
     </div>
   )
-}
+})

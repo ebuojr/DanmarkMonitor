@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Sun, Moon, Globe, Map, Newspaper, BarChart2 as BarChart2Icon } from 'lucide-react'
+import { Sun, Moon, Globe, Map, Newspaper, BarChart2 as BarChart2Icon, Search } from 'lucide-react'
 import { InfoSidebar } from './InfoSidebar'
 import { DataSidebar } from './DataSidebar'
 import { NewsTicker } from './NewsTicker'
-import type { LayerType, MapStyle } from '@/components/map/DenmarkMap'
+import type { LayerType, MapStyle, DenmarkMapHandle } from '@/components/map/DenmarkMap'
 import { LayerControls } from '@/components/map/LayerControls'
+import { SearchModal } from '@/components/search/SearchModal'
+import type { SearchResult } from '@/components/search/useSearchIndex'
 import { cn } from '@/lib/utils'
 
 const DenmarkMap = dynamic(() => import('@/components/map/DenmarkMap').then((m) => m.DenmarkMap), {
@@ -29,6 +31,8 @@ export function CommandCenter() {
   const [activeLayers, setActiveLayers] = useState<Set<LayerType>>(DEFAULT_LAYERS)
   const [mapStyle, setMapStyle] = useState<MapStyle>('dark')
   const [mobileTab, setMobileTab] = useState<MobileTab>('map')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const mapHandle = useRef<DenmarkMapHandle>(null)
 
   useEffect(() => {
     if (mapStyle === 'light') {
@@ -45,6 +49,29 @@ export function CommandCenter() {
       else next.add(layer)
       return next
     })
+  }, [])
+
+  // Global ⌘K / Ctrl+K to open the search modal — prevent the browser's own
+  // "focus address bar" binding from firing at the same time.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  const handleSearchSelect = useCallback((result: SearchResult) => {
+    if (result.link) {
+      window.open(result.link, '_blank', 'noopener')
+    } else if (result.target) {
+      mapHandle.current?.focus(result.target)
+      setMobileTab('map')
+    }
+    setSearchOpen(false)
   }, [])
 
   return (
@@ -64,6 +91,17 @@ export function CommandCenter() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setSearchOpen(true)}
+            title="Søg (⌘K)"
+            className="flex items-center gap-2 rounded-md border border-border bg-muted px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground hover:bg-muted/80"
+          >
+            <Search size={13} />
+            <span className="hidden sm:inline">Søg…</span>
+            <kbd className="hidden sm:inline-flex items-center rounded border border-border bg-background px-1 py-0.5 text-[10px] font-mono text-muted-foreground/70">
+              ⌘K
+            </kbd>
+          </button>
           <a
             href="https://github.com/ebuojr/DanmarkMonitor"
             target="_blank"
@@ -136,7 +174,7 @@ export function CommandCenter() {
               ))}
             </div>
           </div>
-          <DenmarkMap activeLayers={activeLayers} mapStyle={mapStyle} />
+          <DenmarkMap ref={mapHandle} activeLayers={activeLayers} mapStyle={mapStyle} />
         </div>
 
         <div className={cn('h-full', mobileTab === 'right' ? 'flex' : 'hidden', 'lg:flex')}>
@@ -172,6 +210,10 @@ export function CommandCenter() {
       <footer className="shrink-0 h-9 border-t border-border bg-background/80 backdrop-blur-sm">
         <NewsTicker />
       </footer>
+
+      {searchOpen && (
+        <SearchModal onClose={() => setSearchOpen(false)} onSelect={handleSearchSelect} />
+      )}
     </div>
   )
 }
