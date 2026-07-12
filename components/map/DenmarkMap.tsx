@@ -49,7 +49,7 @@ const ROAD_CATEGORIES: { category: string; label: string; color: string }[] = [
 ]
 
 export type LayerType = 'weather' | 'energy' | 'transport' | 'roadtraffic'
-export type MapStyle  = 'dark' | 'satellite' | 'flat'
+export type MapStyle  = 'light' | 'dark' | 'satellite'
 
 interface Props {
   activeLayers: Set<LayerType>
@@ -92,16 +92,19 @@ function computeBearing(from: [number, number], to: [number, number]): number {
   return (Math.atan2(x, y) * (180 / Math.PI) + 360) % 360
 }
 
-// Three base tile sets — dark (OSM inverted via CSS), satellite (ESRI), flat (CartoDB light)
+// Three base tile sets — light (CartoDB voyager), dark (CartoDB dark_all), satellite (ESRI)
 const MAP_BASE_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
   sources: {
     'tiles-dark': {
       type: 'raster',
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tiles: [
+        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+      ],
       tileSize: 256,
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
     },
     'tiles-satellite': {
       type: 'raster',
@@ -110,7 +113,7 @@ const MAP_BASE_STYLE: maplibregl.StyleSpecification = {
       tileSize: 256,
       attribution: '© Esri, Maxar, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, GIS User Community',
     },
-    'tiles-flat': {
+    'tiles-light': {
       type: 'raster',
       tiles: [
         'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
@@ -123,7 +126,7 @@ const MAP_BASE_STYLE: maplibregl.StyleSpecification = {
   layers: [
     { id: 'base-dark',      type: 'raster', source: 'tiles-dark' },
     { id: 'base-satellite', type: 'raster', source: 'tiles-satellite', layout: { visibility: 'none' } },
-    { id: 'base-flat',      type: 'raster', source: 'tiles-flat',      layout: { visibility: 'none' } },
+    { id: 'base-light',     type: 'raster', source: 'tiles-light',     layout: { visibility: 'none' } },
   ],
 }
 
@@ -453,7 +456,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
     const vis = (id: string, show: boolean) => map.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none')
     vis('base-dark',      mapStyle === 'dark')
     vis('base-satellite', mapStyle === 'satellite')
-    vis('base-flat',      mapStyle === 'flat')
+    vis('base-light',     mapStyle === 'light')
   }, [mapReady, mapStyle])
 
   const showTransport = activeLayers.has('transport')
@@ -466,8 +469,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
 
   return (
     <div className="relative size-full overflow-hidden">
-      {/* map-invert class applies CSS filter only in dark mode (inverted OSM) */}
-      <div ref={containerRef} className={`size-full${mapStyle === 'dark' ? ' map-invert' : ''}`} />
+      <div ref={containerRef} className="size-full" />
 
       {/* Info panel — top-left */}
       {popupInfo?.kind === 'vehicle' && (

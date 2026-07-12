@@ -146,11 +146,6 @@
   }
 }
 
-/* Applied only when map-invert class is present (dark/inverted OSM mode) */
-.map-invert .maplibregl-canvas {
-  filter: invert(93%) hue-rotate(180deg) brightness(92%) contrast(88%) saturate(0.85);
-}
-
 /* MapLibre popup — follows active theme via CSS variables */
 .maplibregl-popup-content {
   background: var(--card);

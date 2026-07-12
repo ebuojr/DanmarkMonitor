@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { Moon, Globe, Map, Bell, BarChart2 as BarChart2Icon } from 'lucide-react'
+import { Sun, Moon, Globe, Map, Bell, BarChart2 as BarChart2Icon } from 'lucide-react'
 import { AlertsSidebar } from './AlertsSidebar'
 import { DataSidebar } from './DataSidebar'
 import { NewsTicker } from './NewsTicker'
@@ -20,9 +20,9 @@ type MobileTab = 'map' | 'left' | 'right'
 const DEFAULT_LAYERS: Set<LayerType> = new Set(['weather', 'energy', 'transport', 'roadtraffic'])
 
 const MAP_STYLES: { id: MapStyle; label: string; Icon: React.ComponentType<{ size?: number }> }[] = [
-  { id: 'dark',      label: 'Nat',      Icon: Moon  },
+  { id: 'light',     label: 'Lys',      Icon: Sun   },
+  { id: 'dark',      label: 'Mørk',     Icon: Moon  },
   { id: 'satellite', label: 'Satellit', Icon: Globe },
-  { id: 'flat',      label: 'Standard', Icon: Map   },
 ]
 
 export function CommandCenter() {
@@ -31,7 +31,7 @@ export function CommandCenter() {
   const [mobileTab, setMobileTab] = useState<MobileTab>('map')
 
   useEffect(() => {
-    if (mapStyle === 'flat') {
+    if (mapStyle === 'light') {
       document.documentElement.classList.remove('dark')
     } else {
       document.documentElement.classList.add('dark')
