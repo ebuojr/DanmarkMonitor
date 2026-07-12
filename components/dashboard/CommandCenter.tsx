@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { Sun, Moon, Globe, Map, Bell, BarChart2 as BarChart2Icon } from 'lucide-react'
-import { AlertsSidebar } from './AlertsSidebar'
+import { Sun, Moon, Globe, Map, Newspaper, BarChart2 as BarChart2Icon } from 'lucide-react'
+import { InfoSidebar } from './InfoSidebar'
 import { DataSidebar } from './DataSidebar'
 import { NewsTicker } from './NewsTicker'
 import type { LayerType, MapStyle } from '@/components/map/DenmarkMap'
@@ -111,7 +111,7 @@ export function CommandCenter() {
       {/* Main content */}
       <main className="flex flex-1 min-h-0 overflow-hidden">
         <div className={cn('h-full', mobileTab === 'left' ? 'flex' : 'hidden', 'lg:flex')}>
-          <AlertsSidebar />
+          <InfoSidebar />
         </div>
 
         <div className={cn('flex-1 min-w-0 relative flex-col', mobileTab === 'map' ? 'flex' : 'hidden', 'lg:flex')}>
@@ -148,8 +148,8 @@ export function CommandCenter() {
           onClick={() => setMobileTab('left')}
           className={cn('flex flex-1 flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium transition-colors', mobileTab === 'left' ? 'text-foreground' : 'text-muted-foreground')}
         >
-          <Bell size={16} />
-          Advarsler
+          <Newspaper size={16} />
+          Nyheder
         </button>
         <button
           onClick={() => setMobileTab('map')}
