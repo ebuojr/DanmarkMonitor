@@ -3,15 +3,18 @@
 import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import type { GeoJSON } from 'geojson'
-import { Wind, Train, Bus, X, AlertTriangle } from 'lucide-react'
+import { Wind, X, AlertTriangle } from 'lucide-react'
 import { useWeather } from '@/lib/hooks/useWeather'
 import { useVehicles } from '@/lib/hooks/useVehicles'
+import { useJourney } from '@/lib/hooks/useJourney'
 import { useRoadTraffic } from '@/lib/hooks/useRoadTraffic'
 import { WIND_TURBINES_GEOJSON } from '@/lib/data/wind-turbines'
+import { JourneyPanel } from '@/components/map/JourneyPanel'
+import type { VehicleType } from '@/lib/types/transport'
 
 type PopupInfo =
   | { kind: 'turbine'; name: string; capacity_mw: number; turbines: number; year: number }
-  | { kind: 'vehicle'; name: string; type: string; destination: string; nextStop: string; prevStop: string }
+  | { kind: 'vehicle'; jid: string; name: string; type: VehicleType; destination: string }
   | { kind: 'road'; category: string; title: string; header: string; kommune: string; direction: string; beginPeriod: string; endPeriod: string; description: string }
 
 function stripHtml(html: string): string {
@@ -65,6 +68,8 @@ const VEHICLE_TYPES = [
   { type: 'bus',      label: 'Bus',         color: '#4ade80' },
   { type: 'other',    label: 'Andet',       color: '#94a3b8' },
 ]
+
+const TYPE_COLOR: Record<string, string> = Object.fromEntries(VEHICLE_TYPES.map(({ type, color }) => [type, color]))
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const VEHICLE_COLOR_EXPR: any[] = [
@@ -130,11 +135,15 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
   const [popupInfo, setPopupInfo] = useState<PopupInfo | null>(null)
   const setPopupRef = useRef(setPopupInfo)
   useEffect(() => { setPopupRef.current = setPopupInfo }, [])
+  const [selectedJid, setSelectedJid] = useState<string | null>(null)
+  const setSelectedJidRef = useRef(setSelectedJid)
+  useEffect(() => { setSelectedJidRef.current = setSelectedJid }, [])
   const [vehicleBbox, setVehicleBbox] = useState<{ minLon: number; maxLon: number; minLat: number; maxLat: number } | undefined>(undefined)
 
   const { data: weatherData } = useWeather()
   const { data: vehicleData } = useVehicles(vehicleBbox)
   const { data: roadTrafficData } = useRoadTraffic()
+  const { data: journeyData, isLoading: journeyLoading } = useJourney(selectedJid)
 
   // ── Init map once ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -192,6 +201,34 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
         },
       })
 
+      // ── Selected journey — route line + stop dots (beneath vehicle dots) ──
+      map.addSource('journey-route', { type: 'geojson', data: EMPTY_FC })
+      map.addSource('journey-stops', { type: 'geojson', data: EMPTY_FC })
+
+      map.addLayer({
+        id: 'journey-route',
+        type: 'line',
+        source: 'journey-route',
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': 3.5,
+          'line-opacity': 0.85,
+        },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+      })
+
+      map.addLayer({
+        id: 'journey-stops',
+        type: 'circle',
+        source: 'journey-stops',
+        paint: {
+          'circle-radius': 4,
+          'circle-color': '#ffffff',
+          'circle-stroke-width': 2,
+          'circle-stroke-color': ['get', 'color'],
+        },
+      })
+
       // ── Live vehicles — coloured dots + motion trails ─────────────────────
       map.addSource('vehicles', { type: 'geojson', data: EMPTY_FC })
       map.addSource('vehicle-trails', { type: 'geojson', data: EMPTY_FC })
@@ -230,7 +267,9 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
           const [lon, lat] = f.geometry.coordinates as [number, number]
           const targetZoom = Math.min(maxZoom, map.getZoom() + 2)
           map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), targetZoom), duration: 450, essential: true })
-          setPopupRef.current(getInfo(f))
+          const info = getInfo(f)
+          setPopupRef.current(info)
+          setSelectedJidRef.current(info.kind === 'vehicle' ? info.jid : null)
         })
         map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer' })
         map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = '' })
@@ -242,8 +281,8 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
       })
 
       onLayerClick('vehicle-circles', 9, (f) => {
-        const p = f.properties as { name: string; destination: string; nextStop: string; prevStop: string; type: string }
-        return { kind: 'vehicle', name: p.name, type: p.type, destination: p.destination ?? '', nextStop: p.nextStop ?? '', prevStop: p.prevStop ?? '' }
+        const p = f.properties as { jid: string; name: string; destination: string; type: VehicleType }
+        return { kind: 'vehicle', jid: p.jid, name: p.name, type: p.type, destination: p.destination ?? '' }
       })
 
       // ── Road traffic ──────────────────────────────────────────────────────────
@@ -319,10 +358,6 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
 
     const vehicles = vehicleData?.data?.vehicles ?? []
     const prev = prevVehiclePositions.current
-    const typeColor: Record<string, string> = {
-      ic: '#f59e0b', regional: '#fb923c', stog: '#60a5fa',
-      metro: '#a78bfa', bus: '#4ade80', other: '#94a3b8',
-    }
 
     const trails: GeoJSON.Feature[] = []
 
@@ -335,13 +370,13 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
           trails.push({
             type: 'Feature',
             geometry: { type: 'LineString', coordinates: [prevPos, cur] },
-            properties: { color: typeColor[v.type] ?? '#94a3b8' },
+            properties: { color: TYPE_COLOR[v.type] ?? '#94a3b8' },
           })
         }
         return {
           type: 'Feature',
           geometry: { type: 'Point', coordinates: cur },
-          properties: { id: v.id, name: v.name, type: v.type, destination: v.destination, nextStop: v.nextStop, prevStop: v.prevStop },
+          properties: { id: v.id, jid: v.jid, name: v.name, type: v.type, destination: v.destination },
         }
       }),
     }
@@ -350,6 +385,41 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
     ;(map.getSource('vehicles') as maplibregl.GeoJSONSource).setData(vehicleGeoJSON)
     ;(map.getSource('vehicle-trails') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: trails })
   }, [mapReady, vehicleData])
+
+  // ── Update selected journey route + stops ─────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+
+    const journey = selectedJid ? journeyData?.data?.journey : undefined
+    const selectedType = popupInfo?.kind === 'vehicle' ? popupInfo.type : 'other'
+    const color = TYPE_COLOR[selectedType] ?? '#94a3b8'
+
+    if (!journey) {
+      ;(map.getSource('journey-route') as maplibregl.GeoJSONSource).setData(EMPTY_FC)
+      ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource).setData(EMPTY_FC)
+      return
+    }
+
+    ;(map.getSource('journey-route') as maplibregl.GeoJSONSource).setData({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: journey.line },
+          properties: { color },
+        },
+      ],
+    })
+    ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource).setData({
+      type: 'FeatureCollection',
+      features: journey.stops.map((s) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
+        properties: { name: s.name, color },
+      })),
+    })
+  }, [mapReady, selectedJid, journeyData, popupInfo])
 
   // ── Update road traffic ───────────────────────────────────────────────────
   useEffect(() => {
@@ -371,6 +441,8 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
     vis('turbine-circles', activeLayers.has('energy'))
     vis('vehicle-trails',  activeLayers.has('transport'))
     vis('vehicle-circles', activeLayers.has('transport'))
+    vis('journey-route',   activeLayers.has('transport'))
+    vis('journey-stops',   activeLayers.has('transport'))
     vis('road-circles',    activeLayers.has('roadtraffic'))
   }, [mapReady, activeLayers])
 
@@ -387,9 +459,10 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
   const showTransport = activeLayers.has('transport')
   const showEnergy    = activeLayers.has('energy')
 
-  const VEHICLE_LABEL: Record<string, string> = { ic: 'IC / Lyntog', regional: 'Regional', stog: 'S-tog', metro: 'Metro', bus: 'Bus', other: 'Transport' }
   const ROAD_LABEL: Record<string, string> = Object.fromEntries(ROAD_CATEGORIES.map(({ category, label }) => [category, label]))
   const showRoadTraffic = activeLayers.has('roadtraffic')
+
+  const closePopup = () => { setPopupInfo(null); setSelectedJid(null) }
 
   return (
     <div className="relative size-full overflow-hidden">
@@ -397,25 +470,32 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
       <div ref={containerRef} className={`size-full${mapStyle === 'dark' ? ' map-invert' : ''}`} />
 
       {/* Info panel — top-left */}
-      {popupInfo && (
+      {popupInfo?.kind === 'vehicle' && (
+        <div className="absolute top-3 left-3 z-20">
+          <JourneyPanel
+            name={popupInfo.name}
+            type={popupInfo.type}
+            destination={popupInfo.destination}
+            journey={journeyData?.data?.journey}
+            isLoading={journeyLoading}
+            onClose={closePopup}
+          />
+        </div>
+      )}
+
+      {popupInfo && popupInfo.kind !== 'vehicle' && (
         <div className="absolute top-3 left-3 z-20 w-64 rounded-lg bg-background border border-border shadow-lg overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/60 bg-muted/30">
             <div className="flex items-center gap-2">
               {popupInfo.kind === 'turbine' ? (
                 <Wind size={13} className="text-green-400 shrink-0" />
-              ) : popupInfo.kind === 'road' ? (
-                <AlertTriangle size={13} className="text-orange-400 shrink-0" />
-              ) : popupInfo.type === 'bus' ? (
-                <Bus size={13} className="text-green-400 shrink-0" />
               ) : (
-                <Train size={13} className="text-blue-400 shrink-0" />
+                <AlertTriangle size={13} className="text-orange-400 shrink-0" />
               )}
               <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
                 {popupInfo.kind === 'turbine'
                   ? 'Vindmøllepark'
-                  : popupInfo.kind === 'road'
-                  ? (ROAD_LABEL[popupInfo.category] ?? 'Trafikhændelse')
-                  : (VEHICLE_LABEL[popupInfo.type] ?? 'Transport')}
+                  : (ROAD_LABEL[popupInfo.category] ?? 'Trafikhændelse')}
               </span>
             </div>
             <button onClick={() => setPopupInfo(null)} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -429,7 +509,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
                 <p className="text-sm font-semibold text-foreground">{popupInfo.name}</p>
                 <p className="text-muted-foreground">{popupInfo.capacity_mw} MW &middot; {popupInfo.turbines} møller &middot; {popupInfo.year}</p>
               </>
-            ) : popupInfo.kind === 'road' ? (
+            ) : (
               <>
                 <p className="text-sm font-semibold text-foreground">{popupInfo.title || popupInfo.header}</p>
                 {popupInfo.kommune && <p className="text-muted-foreground">{popupInfo.kommune}</p>}
@@ -442,19 +522,6 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
                 )}
                 {popupInfo.description && (
                   <p className="pt-1.5 border-t border-border/40 text-muted-foreground text-xs leading-relaxed">{stripHtml(popupInfo.description)}</p>
-                )}
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-semibold text-foreground">{popupInfo.name}</p>
-                {popupInfo.destination && (
-                  <p className="text-muted-foreground">→ <span className="text-foreground font-medium">{popupInfo.destination}</span></p>
-                )}
-                {(popupInfo.prevStop || popupInfo.nextStop) && (
-                  <div className="pt-1.5 border-t border-border/40 space-y-1">
-                    {popupInfo.prevStop && <p className="text-muted-foreground">Forrige: {popupInfo.prevStop}</p>}
-                    {popupInfo.nextStop && <p className="text-foreground font-medium">Næste: {popupInfo.nextStop}</p>}
-                  </div>
                 )}
               </>
             )}

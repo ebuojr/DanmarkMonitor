@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { fetchLiveVehicles } from '@/lib/api/rejseplanen-livemap'
-import type { ViewportBbox } from '@/lib/api/rejseplanen-livemap'
+import { fetchVehiclePositions } from '@/lib/api/hafas'
+import type { ViewportBbox } from '@/lib/api/hafas'
 import type { Vehicle } from '@/lib/types/transport'
 
 // Per-instance TTL cache: the upstream livemap fetch is a POST with a
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const vehicles = await fetchLiveVehicles(viewport)
+    const vehicles = await fetchVehiclePositions(viewport)
     // Prune stale entries; the bbox key space is user-controlled input,
     // so without this the map is a slow memory leak.
     for (const [k, v] of cache) {
