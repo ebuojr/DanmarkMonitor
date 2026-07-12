@@ -22,10 +22,24 @@ React 19, TypeScript strict, Tailwind v4 (CSS-only config), SWR polling.
   throws on non-2xx.
 - `components/map/DenmarkMap.tsx` — all MapLibre sources/layers/popups.
 - Aircraft positions come from adsb.lol (`lib/api/adsb.ts`, public ADS-B
-  feed, no auth). The CPH arrivals/departures board comes from Copenhagen
-  Airport's own undocumented site API, `GetFlightInfoTable`
-  (`lib/api/cph.ts`) — treat as change-without-notice; note its `Destination`
-  field holds the *origin* city on arrivals (CPH reuses the field name).
+  feed, no auth). Each aircraft's route (origin/destination airport, airline)
+  is resolved via adsbdb.com (`lib/api/adsbdb.ts`, free, no auth, no batch
+  endpoint — per-callsign lookups only). `/api/flights` keeps only aircraft
+  whose route touches Denmark (`origin.countryIso === 'DK' ||
+  destination.countryIso === 'DK'`); aircraft whose callsign doesn't resolve
+  are excluded by design (ADS-B alone can't prove a Danish connection) — this
+  deliberately drops military/GA traffic with no filed route. adsbdb returns
+  HTTP 404 (not 200) with `{"response":"unknown callsign"}` for a genuine
+  unknown — that's cached negatively (15min TTL); network/timeout failures
+  are NOT cached so they retry next poll. Positive lookups cache 6h, capped
+  at 1000 entries (oldest-eviction) — community-run upstream, no SLA, so the
+  cache exists to be polite as much as for latency. If adsbdb goes down,
+  adsb.lol's `/api/0/routeset` POST is an unexplored fallback (returned
+  201-empty in an initial probe — shape needs rework). The CPH
+  arrivals/departures board comes from Copenhagen Airport's own undocumented
+  site API, `GetFlightInfoTable` (`lib/api/cph.ts`) — treat as
+  change-without-notice; note its `Destination` field holds the *origin*
+  city on arrivals (CPH reuses the field name).
 - Times/dates: upstream data is Europe/Copenhagen; never index hourly arrays
   with `getUTCHours()`.
 

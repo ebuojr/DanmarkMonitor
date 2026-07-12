@@ -17,7 +17,7 @@ const DenmarkMap = dynamic(() => import('@/components/map/DenmarkMap').then((m) 
 
 type MobileTab = 'map' | 'left' | 'right'
 
-const DEFAULT_LAYERS: Set<LayerType> = new Set(['weather', 'energy', 'transport', 'roadtraffic'])
+const DEFAULT_LAYERS: Set<LayerType> = new Set(['weather', 'energy', 'transport', 'roadtraffic', 'flights'])
 
 const MAP_STYLES: { id: MapStyle; label: string; Icon: React.ComponentType<{ size?: number }> }[] = [
   { id: 'light',     label: 'Lys',      Icon: Sun   },

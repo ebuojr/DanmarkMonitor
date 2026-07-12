@@ -1,3 +1,18 @@
+export interface RouteAirport {
+  iata: string
+  name: string
+  municipality: string
+  lat: number
+  lon: number
+  countryIso: string
+}
+
+export interface FlightRoute {
+  airline: string
+  origin: RouteAirport
+  destination: RouteAirport
+}
+
 export interface Aircraft {
   id: string
   callsign: string
@@ -7,6 +22,9 @@ export interface Aircraft {
   heading: number
   speed: number
   category: string
+  airline: string
+  origin: RouteAirport
+  destination: RouteAirport
 }
 
 export interface FlightsResponse {

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import type { GeoJSON } from 'geojson'
-import { Wind, X, AlertTriangle, Plane } from 'lucide-react'
+import { Wind, X, AlertTriangle } from 'lucide-react'
 import { useWeather } from '@/lib/hooks/useWeather'
 import { useVehicles } from '@/lib/hooks/useVehicles'
 import { useJourney } from '@/lib/hooks/useJourney'
@@ -11,13 +11,18 @@ import { useRoadTraffic } from '@/lib/hooks/useRoadTraffic'
 import { useFlights } from '@/lib/hooks/useFlights'
 import { WIND_TURBINES_GEOJSON } from '@/lib/data/wind-turbines'
 import { JourneyPanel } from '@/components/map/JourneyPanel'
+import { FlightPanel } from '@/components/map/FlightPanel'
 import type { VehicleType } from '@/lib/types/transport'
 
 type PopupInfo =
   | { kind: 'turbine'; name: string; capacity_mw: number; turbines: number; year: number }
   | { kind: 'vehicle'; jid: string; name: string; type: VehicleType; destination: string }
   | { kind: 'road'; category: string; title: string; header: string; kommune: string; direction: string; beginPeriod: string; endPeriod: string; description: string }
-  | { kind: 'flight'; callsign: string; alt: number; speed: number }
+
+// One selection at a time — clicking a vehicle or a flight clears the other;
+// closing the popup clears this too. This is the extension point future
+// programmatic-selection features (e.g. search) will drive.
+type Selected = { kind: 'vehicle'; jid: string } | { kind: 'flight'; id: string } | null
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -130,15 +135,15 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
   const [popupInfo, setPopupInfo] = useState<PopupInfo | null>(null)
   const setPopupRef = useRef(setPopupInfo)
   useEffect(() => { setPopupRef.current = setPopupInfo }, [])
-  const [selectedJid, setSelectedJid] = useState<string | null>(null)
-  const setSelectedJidRef = useRef(setSelectedJid)
-  useEffect(() => { setSelectedJidRef.current = setSelectedJid }, [])
+  const [selected, setSelected] = useState<Selected>(null)
+  const setSelectedRef = useRef(setSelected)
+  useEffect(() => { setSelectedRef.current = setSelected }, [])
   const [vehicleBbox, setVehicleBbox] = useState<{ minLon: number; maxLon: number; minLat: number; maxLat: number } | undefined>(undefined)
 
   const { data: weatherData } = useWeather()
   const { data: vehicleData } = useVehicles(vehicleBbox)
   const { data: roadTrafficData } = useRoadTraffic()
-  const { data: journeyData, isLoading: journeyLoading } = useJourney(selectedJid)
+  const { data: journeyData, isLoading: journeyLoading } = useJourney(selected?.kind === 'vehicle' ? selected.jid : null)
   const { data: flightsData } = useFlights()
 
   // ── Init map once ──────────────────────────────────────────────────────────
@@ -256,16 +261,14 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
       })
 
       // ── Click handlers — show React panel instead of MapLibre popup ─────────
-      const onLayerClick = (layerId: string, maxZoom: number, getInfo: (f: maplibregl.MapGeoJSONFeature) => PopupInfo) => {
+      const onLayerClick = (layerId: string, maxZoom: number, handle: (f: maplibregl.MapGeoJSONFeature) => void) => {
         map.on('click', layerId, (e) => {
           const f = map.queryRenderedFeatures(e.point, { layers: [layerId] })[0]
           if (!f || f.geometry.type !== 'Point') return
           const [lon, lat] = f.geometry.coordinates as [number, number]
           const targetZoom = Math.min(maxZoom, map.getZoom() + 2)
           map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), targetZoom), duration: 450, essential: true })
-          const info = getInfo(f)
-          setPopupRef.current(info)
-          setSelectedJidRef.current(info.kind === 'vehicle' ? info.jid : null)
+          handle(f)
         })
         map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer' })
         map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = '' })
@@ -273,12 +276,14 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
 
       onLayerClick('turbine-circles', 8, (f) => {
         const p = f.properties as { name: string; capacity_mw: number; turbines: number; year: number }
-        return { kind: 'turbine', name: p.name, capacity_mw: p.capacity_mw, turbines: p.turbines, year: p.year }
+        setPopupRef.current({ kind: 'turbine', name: p.name, capacity_mw: p.capacity_mw, turbines: p.turbines, year: p.year })
+        setSelectedRef.current(null)
       })
 
       onLayerClick('vehicle-circles', 9, (f) => {
         const p = f.properties as { jid: string; name: string; destination: string; type: VehicleType }
-        return { kind: 'vehicle', jid: p.jid, name: p.name, type: p.type, destination: p.destination ?? '' }
+        setPopupRef.current({ kind: 'vehicle', jid: p.jid, name: p.name, type: p.type, destination: p.destination ?? '' })
+        setSelectedRef.current({ kind: 'vehicle', jid: p.jid })
       })
 
       // ── Road traffic ──────────────────────────────────────────────────────────
@@ -298,7 +303,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
 
       onLayerClick('road-circles', 9, (f) => {
         const p = f.properties as { category: string; title: string; header: string; kommune: string; direction: string; beginPeriod: string; endPeriod: string; description: string }
-        return {
+        setPopupRef.current({
           kind: 'road',
           category: p.category ?? '',
           title: p.title ?? '',
@@ -308,7 +313,8 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
           beginPeriod: p.beginPeriod ?? '',
           endPeriod: p.endPeriod ?? '',
           description: p.description ?? '',
-        }
+        })
+        setSelectedRef.current(null)
       })
 
       // ── Live aircraft — ADS-B positions over Denmark ──────────────────────
@@ -329,8 +335,13 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
       })
 
       onLayerClick('flight-icons', 10, (f) => {
-        const p = f.properties as { id: string; callsign: string; alt: number; speed: number; heading: number }
-        return { kind: 'flight', callsign: p.callsign ?? '', alt: p.alt ?? 0, speed: p.speed ?? 0 }
+        const p = f.properties as { id: string }
+        // No popup card for flights — FlightPanel renders instead, driven by
+        // `selected` + a live lookup into the flights SWR data (so it always
+        // reflects the aircraft's current position/alt/speed, not a stale
+        // click-time snapshot).
+        setPopupRef.current(null)
+        setSelectedRef.current({ kind: 'flight', id: p.id ?? '' })
       })
 
       const updateBbox = () => {
@@ -404,40 +415,97 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
     ;(map.getSource('vehicle-trails') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: trails })
   }, [mapReady, vehicleData])
 
-  // ── Update selected journey route + stops ─────────────────────────────────
+  // ── Update selected route (vehicle journey OR flight origin→plane→dest) ────
+  // Both branches share the `journey-route` / `journey-stops` sources (they
+  // are generic line+points sources) — a single effect owns both so they
+  // can never clobber each other.
+  const FLIGHT_ROUTE_COLOR = '#f472b6'
+
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
 
-    const journey = selectedJid ? journeyData?.data?.journey : undefined
-    const selectedType = popupInfo?.kind === 'vehicle' ? popupInfo.type : 'other'
-    const color = TYPE_COLOR[selectedType] ?? '#94a3b8'
-
-    if (!journey) {
+    const clearRoute = () => {
       ;(map.getSource('journey-route') as maplibregl.GeoJSONSource).setData(EMPTY_FC)
       ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource).setData(EMPTY_FC)
+    }
+
+    if (selected?.kind === 'vehicle') {
+      const journey = journeyData?.data?.journey
+      const selectedType = popupInfo?.kind === 'vehicle' ? popupInfo.type : 'other'
+      const color = TYPE_COLOR[selectedType] ?? '#94a3b8'
+
+      if (!journey) { clearRoute(); return }
+
+      ;(map.getSource('journey-route') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: journey.line },
+            properties: { color },
+          },
+        ],
+      })
+      ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features: journey.stops.map((s) => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
+          properties: { name: s.name, color },
+        })),
+      })
       return
     }
 
-    ;(map.getSource('journey-route') as maplibregl.GeoJSONSource).setData({
-      type: 'FeatureCollection',
-      features: [
-        {
-          type: 'Feature',
-          geometry: { type: 'LineString', coordinates: journey.line },
-          properties: { color },
-        },
-      ],
-    })
-    ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource).setData({
-      type: 'FeatureCollection',
-      features: journey.stops.map((s) => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
-        properties: { name: s.name, color },
-      })),
-    })
-  }, [mapReady, selectedJid, journeyData, popupInfo])
+    if (selected?.kind === 'flight') {
+      const aircraft = flightsData?.data?.aircraft.find((a) => a.id === selected.id)
+      if (!aircraft) {
+        // Landed / out of range / dropped by the Danish filter — clear.
+        // Deferred via queueMicrotask (same convention as LiveClock below)
+        // since setState synchronously inside an effect body is disallowed.
+        clearRoute()
+        queueMicrotask(() => setSelected(null))
+        return
+      }
+
+      ;(map.getSource('journey-route') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [aircraft.origin.lon, aircraft.origin.lat],
+                [aircraft.lon, aircraft.lat],
+                [aircraft.destination.lon, aircraft.destination.lat],
+              ],
+            },
+            properties: { color: FLIGHT_ROUTE_COLOR },
+          },
+        ],
+      })
+      ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [aircraft.origin.lon, aircraft.origin.lat] },
+            properties: { name: aircraft.origin.name, color: FLIGHT_ROUTE_COLOR },
+          },
+          {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [aircraft.destination.lon, aircraft.destination.lat] },
+            properties: { name: aircraft.destination.name, color: FLIGHT_ROUTE_COLOR },
+          },
+        ],
+      })
+      return
+    }
+
+    clearRoute()
+  }, [mapReady, selected, journeyData, flightsData, popupInfo])
 
   // ── Update road traffic ───────────────────────────────────────────────────
   useEffect(() => {
@@ -474,8 +542,10 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
     vis('turbine-circles', activeLayers.has('energy'))
     vis('vehicle-trails',  activeLayers.has('transport'))
     vis('vehicle-circles', activeLayers.has('transport'))
-    vis('journey-route',   activeLayers.has('transport'))
-    vis('journey-stops',   activeLayers.has('transport'))
+    // journey-route/journey-stops are shared by vehicle journeys AND flight
+    // routes now — visible if either layer that can select something is on.
+    vis('journey-route',   activeLayers.has('transport') || activeLayers.has('flights'))
+    vis('journey-stops',   activeLayers.has('transport') || activeLayers.has('flights'))
     vis('road-circles',    activeLayers.has('roadtraffic'))
     vis('flight-icons',    activeLayers.has('flights'))
   }, [mapReady, activeLayers])
@@ -496,7 +566,10 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
   const ROAD_LABEL: Record<string, string> = Object.fromEntries(ROAD_CATEGORIES.map(({ category, label }) => [category, label]))
   const showRoadTraffic = activeLayers.has('roadtraffic')
 
-  const closePopup = () => { setPopupInfo(null); setSelectedJid(null) }
+  const closePopup = () => { setPopupInfo(null); setSelected(null) }
+  const selectedFlight = selected?.kind === 'flight'
+    ? flightsData?.data?.aircraft.find((a) => a.id === selected.id)
+    : undefined
 
   return (
     <div className="relative size-full overflow-hidden">
@@ -516,22 +589,32 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
         </div>
       )}
 
+      {selectedFlight && (
+        <div className="absolute top-3 left-3 z-20">
+          <FlightPanel
+            callsign={selectedFlight.callsign}
+            airline={selectedFlight.airline}
+            origin={selectedFlight.origin}
+            destination={selectedFlight.destination}
+            alt={selectedFlight.alt}
+            speed={selectedFlight.speed}
+            onClose={closePopup}
+          />
+        </div>
+      )}
+
       {popupInfo && popupInfo.kind !== 'vehicle' && (
         <div className="absolute top-3 left-3 z-20 w-64 max-w-[calc(100vw-1.5rem)] rounded-lg bg-background border border-border shadow-lg overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/60 bg-muted/30">
             <div className="flex items-center gap-2">
               {popupInfo.kind === 'turbine' ? (
                 <Wind size={13} className="text-green-400 shrink-0" />
-              ) : popupInfo.kind === 'flight' ? (
-                <Plane size={13} className="text-pink-400 shrink-0" />
               ) : (
                 <AlertTriangle size={13} className="text-orange-400 shrink-0" />
               )}
               <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
                 {popupInfo.kind === 'turbine'
                   ? 'Vindmøllepark'
-                  : popupInfo.kind === 'flight'
-                  ? 'Fly'
                   : (ROAD_LABEL[popupInfo.category] ?? 'Trafikhændelse')}
               </span>
             </div>
@@ -545,11 +628,6 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
               <>
                 <p className="text-sm font-semibold text-foreground">{popupInfo.name}</p>
                 <p className="text-muted-foreground">{popupInfo.capacity_mw} MW &middot; {popupInfo.turbines} møller &middot; {popupInfo.year}</p>
-              </>
-            ) : popupInfo.kind === 'flight' ? (
-              <>
-                <p className="text-sm font-semibold text-foreground">{popupInfo.callsign}</p>
-                <p className="text-muted-foreground">{popupInfo.alt} ft &middot; {Math.round(popupInfo.speed)} kn</p>
               </>
             ) : (
               <>
