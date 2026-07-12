@@ -5,14 +5,6 @@ import type { Alert } from '@/lib/types/alerts'
 export async function GET() {
   const updatedAt = new Date().toISOString()
 
-  if (!process.env.DMI_API_KEY) {
-    return NextResponse.json({
-      data: { alerts: [], updatedAt },
-      error: 'DMI_API_KEY not configured',
-      updatedAt,
-    })
-  }
-
   try {
     const warnings = await fetchWeatherWarnings()
 
