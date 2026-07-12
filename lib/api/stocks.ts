@@ -24,7 +24,7 @@ async function fetchSymbol(symbol: string): Promise<Stock | null> {
   try {
     const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`
     const res = await fetch(url, {
-      cache: 'no-store',
+      next: { revalidate: 30 },
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'application/json',
