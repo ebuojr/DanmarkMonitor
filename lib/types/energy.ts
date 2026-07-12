@@ -7,8 +7,21 @@ export interface EnergyProduction {
   total: number
 }
 
+export interface EnergyExchangeFlow {
+  label: string
+  mw: number
+}
+
+export interface EnergyExchange {
+  sum: number
+  flows: EnergyExchangeFlow[]
+}
+
 export interface EnergyData {
   production: EnergyProduction
+  windOffshore: number
+  windOnshore: number
+  exchange: EnergyExchange
   co2: number
   renewablesPct: number
   updatedAt: string

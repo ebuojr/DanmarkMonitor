@@ -23,7 +23,7 @@ export function EnergyWidget() {
     return <WidgetError label={data?.error ?? 'Energidata utilgængelig'} />
   }
 
-  const { production, co2, renewablesPct } = data.data
+  const { production, windOffshore, windOnshore, exchange, co2, renewablesPct } = data.data
 
   const barSegments = SOURCES.map((s) => ({
     ...s,
@@ -60,6 +60,29 @@ export function EnergyWidget() {
             <span className="ml-auto tabular-nums text-sm font-medium">{s.value} MW</span>
           </div>
         ))}
+      </div>
+
+      <p className="text-[11px] text-muted-foreground pl-3.5">
+        Havvind {windOffshore} MW · Landvind {windOnshore} MW
+      </p>
+
+      <div className="border-t border-border pt-2 space-y-1">
+        <p className="text-xs text-muted-foreground">Udveksling</p>
+        {exchange.flows.map((f) => (
+          <div key={f.label} className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">{f.label}</span>
+            <span className="tabular-nums font-medium">
+              {f.mw >= 0 ? '↓' : '↑'} {Math.abs(f.mw)} MW
+            </span>
+          </div>
+        ))}
+        <div className="flex items-center justify-between text-sm pt-0.5">
+          <span className="text-muted-foreground">Netto</span>
+          <span className="tabular-nums font-semibold">
+            {exchange.sum >= 0 ? '+' : ''}
+            {exchange.sum} MW
+          </span>
+        </div>
       </div>
 
       <div className="flex items-center justify-between border-t border-border pt-2 text-sm">
