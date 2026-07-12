@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Train, Plane, Wind, AlertTriangle, MapPin, Newspaper, Search } from 'lucide-react'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { useSearchIndex, GROUP_LABEL, type SearchGroup, type SearchResult } from './useSearchIndex'
 
@@ -58,23 +57,23 @@ export function SearchModal({ onClose, onSelect }: Props) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg w-[calc(100vw-2rem)] rounded-xl border border-border bg-background shadow-2xl overflow-hidden"
+        className="flex w-full max-w-lg w-[calc(100vw-2rem)] max-h-[min(76vh,42rem)] flex-col rounded-xl border border-border bg-background shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 border-b border-border px-3.5 py-1">
-          <Search size={16} className="text-muted-foreground shrink-0" />
+        <div className="flex items-center gap-2 border-b border-border px-3.5 py-1.5">
+          <Search size={18} className="text-muted-foreground shrink-0" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => { setQuery(e.target.value); setActiveIndex(0) }}
             onKeyDown={handleKeyDown}
             placeholder="Søg efter tog, bus, fly, vindmøllepark, vej, lufthavn, nyhed…"
-            className="w-full min-h-11 sm:min-h-9 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
+            className="w-full min-h-12 bg-transparent text-base outline-none placeholder:text-muted-foreground/70"
           />
         </div>
 
-        <ScrollArea className="max-h-[60vh]">
-          <div className="p-1.5">
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="p-1.5 pb-2">
             {flat.length === 0 && (
               <p className="px-3 py-6 text-center text-sm text-muted-foreground">
                 Ingen resultater
@@ -93,6 +92,7 @@ export function SearchModal({ onClose, onSelect }: Props) {
                     </p>
                   )}
                   <button
+                    ref={active ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
                     onClick={() => onSelect(result)}
                     onMouseEnter={() => setActiveIndex(idx)}
                     className={cn(
@@ -112,9 +112,9 @@ export function SearchModal({ onClose, onSelect }: Props) {
               )
             })}
           </div>
-        </ScrollArea>
+        </div>
 
-        <div className="hidden sm:flex items-center gap-3 border-t border-border px-3.5 py-1.5 text-[10px] text-muted-foreground">
+        <div className="hidden sm:flex shrink-0 items-center gap-3 border-t border-border px-3.5 py-1.5 text-[10px] text-muted-foreground">
           <span><kbd className="rounded border border-border px-1 py-0.5">↑↓</kbd> naviger</span>
           <span><kbd className="rounded border border-border px-1 py-0.5">Enter</kbd> vælg</span>
           <span><kbd className="rounded border border-border px-1 py-0.5">Esc</kbd> luk</span>
