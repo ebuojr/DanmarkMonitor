@@ -104,7 +104,9 @@ export function CommandCenter() {
           <span className="hidden md:block">
             {new Date().toLocaleDateString('da-DK', { weekday: 'short', day: 'numeric', month: 'short' })}
           </span>
-          <LiveClock />
+          <span className="hidden sm:block">
+            <LiveClock />
+          </span>
         </div>
       </header>
 

@@ -130,7 +130,6 @@ const MAP_BASE_STYLE: maplibregl.StyleSpecification = {
 export function DenmarkMap({ activeLayers, mapStyle }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
-  const prevVehiclePositions = useRef<Map<string, [number, number]>>(new Map())
   const [mapReady, setMapReady] = useState(false)
   const [popupInfo, setPopupInfo] = useState<PopupInfo | null>(null)
   const setPopupRef = useRef(setPopupInfo)
@@ -180,9 +179,9 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
           'text-ignore-placement': true,
         },
         paint: {
-          'text-color': 'rgba(255,255,255,0.8)',
-          'text-halo-color': 'rgba(0,0,0,0.65)',
-          'text-halo-width': 1.5,
+          'text-color': '#ffffff',
+          'text-halo-color': 'rgba(0,0,0,0.9)',
+          'text-halo-width': 2,
         },
       })
 
@@ -230,22 +229,8 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
         },
       })
 
-      // ── Live vehicles — coloured dots + motion trails ─────────────────────
+      // ── Live vehicles — coloured dots ─────────────────────────────────────
       map.addSource('vehicles', { type: 'geojson', data: EMPTY_FC })
-      map.addSource('vehicle-trails', { type: 'geojson', data: EMPTY_FC })
-
-      map.addLayer({
-        id: 'vehicle-trails',
-        type: 'line',
-        source: 'vehicle-trails',
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': 2,
-          'line-opacity': 0.45,
-          'line-blur': 0.5,
-        },
-        layout: { 'line-cap': 'round' },
-      })
 
       map.addLayer({
         id: 'vehicle-circles',
@@ -380,39 +365,23 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
     })
   }, [mapReady, weatherData])
 
-  // ── Update vehicles + motion trails ───────────────────────────────────────
+  // ── Update vehicles ────────────────────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
 
     const vehicles = vehicleData?.data?.vehicles ?? []
-    const prev = prevVehiclePositions.current
-
-    const trails: GeoJSON.Feature[] = []
 
     const vehicleGeoJSON: GeoJSON.FeatureCollection = {
       type: 'FeatureCollection',
-      features: vehicles.map((v) => {
-        const cur: [number, number] = [v.lon, v.lat]
-        const prevPos = prev.get(v.id)
-        if (prevPos && Math.abs(cur[0] - prevPos[0]) + Math.abs(cur[1] - prevPos[1]) > 0.0001) {
-          trails.push({
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: [prevPos, cur] },
-            properties: { color: TYPE_COLOR[v.type] ?? '#94a3b8' },
-          })
-        }
-        return {
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: cur },
-          properties: { id: v.id, jid: v.jid, name: v.name, type: v.type, destination: v.destination },
-        }
-      }),
+      features: vehicles.map((v) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [v.lon, v.lat] },
+        properties: { id: v.id, jid: v.jid, name: v.name, type: v.type, destination: v.destination },
+      })),
     }
 
-    prevVehiclePositions.current = new Map(vehicles.map((v) => [v.id, [v.lon, v.lat] as [number, number]]))
     ;(map.getSource('vehicles') as maplibregl.GeoJSONSource).setData(vehicleGeoJSON)
-    ;(map.getSource('vehicle-trails') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: trails })
   }, [mapReady, vehicleData])
 
   // ── Update selected route (vehicle journey OR flight origin→plane→dest) ────
@@ -540,7 +509,6 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
     const vis = (id: string, show: boolean) => map.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none')
     vis('weather-labels',  activeLayers.has('weather'))
     vis('turbine-circles', activeLayers.has('energy'))
-    vis('vehicle-trails',  activeLayers.has('transport'))
     vis('vehicle-circles', activeLayers.has('transport'))
     // journey-route/journey-stops are shared by vehicle journeys AND flight
     // routes now — visible if either layer that can select something is on.
@@ -579,6 +547,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
       {popupInfo?.kind === 'vehicle' && (
         <div className="absolute top-3 left-3 z-20">
           <JourneyPanel
+            jid={popupInfo.jid}
             name={popupInfo.name}
             type={popupInfo.type}
             destination={popupInfo.destination}
