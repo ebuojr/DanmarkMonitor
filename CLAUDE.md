@@ -39,7 +39,26 @@ React 19, TypeScript strict, Tailwind v4 (CSS-only config), SWR polling.
   arrivals/departures board comes from Copenhagen Airport's own undocumented
   site API, `GetFlightInfoTable` (`lib/api/cph.ts`) — treat as
   change-without-notice; note its `Destination` field holds the *origin*
-  city on arrivals (CPH reuses the field name).
+  city on arrivals (CPH reuses the field name). `/api/airport` also serves
+  **Billund** (`lib/api/bll.ts`) and **Aarhus** (`lib/api/aar.ts`) via the
+  `code` query param (`CPH`/`BLL`/`AAR`):
+  - Billund: undocumented Umbraco surface-controller JSON,
+    `bll.dk/umbraco/surface/FtpData/{Arrival,Departure}FlightsData` — no auth,
+    change-without-notice. Times are bare `"HH:MM"` strings (already Danish
+    local), not ISO; no gate is exposed in this feed.
+  - Aarhus: no API at all — `aar.dk/flytider/` server-renders a tabbed HTML
+    table (`#nav-departures`/`#nav-arrivals`) that's regex-scraped, same
+    fragility class as `wallnot.ts`. The table covers *two* calendar days
+    with no per-row date, so identical flight+time rows can legitimately
+    recur (e.g. a daily SK1248 at 12:30 today and tomorrow) — widget list
+    keys must not assume `iata+scheduled` is unique. Fails soft: returns `[]`
+    and `console.warn`s on markup drift, letting the route's generic catch
+    handle real upstream failure separately.
+  - Aalborg and Odense/HCA publish no live flight board anywhere (checked
+    2026-07-12: homepage, sitemap, and path guesses on aal.dk all came up
+    empty, and Odense/HCA has no meaningful scheduled traffic) — don't add
+    fake entries for them; if either ever publishes one, follow the
+    fetcher-per-airport pattern above.
 - Times/dates: upstream data is Europe/Copenhagen; never index hourly arrays
   with `getUTCHours()`.
 

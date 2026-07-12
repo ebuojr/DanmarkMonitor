@@ -45,8 +45,15 @@ export interface BoardFlight {
   status: string
 }
 
+export type AirportCode = 'CPH' | 'BLL' | 'AAR'
+
 export interface AirportBoardResponse {
-  data: { flights: BoardFlight[]; direction: 'A' | 'D'; updatedAt: string } | null
+  data: {
+    flights: BoardFlight[]
+    direction: 'A' | 'D'
+    airport: AirportCode
+    updatedAt: string
+  } | null
   error?: string
   updatedAt: string
 }

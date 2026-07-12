@@ -11,6 +11,13 @@ export function DataSidebar() {
   return (
     <aside className="flex flex-col h-full overflow-y-auto lg:overflow-hidden border-l border-border shrink-0 w-full lg:w-80">
       <div className="shrink-0 border-b border-border">
+        <SectionHeader icon={Plane} label="Lufthavne" />
+        <div className="p-3">
+          <FlightBoard />
+        </div>
+      </div>
+
+      <div className="shrink-0 border-b border-border">
         <SectionHeader icon={Zap} label="Energi" />
         <div className="p-3">
           <EnergyWidget />
@@ -28,13 +35,6 @@ export function DataSidebar() {
         <SectionHeader icon={CloudSun} label="Vejr" />
         <div className="flex-1 overflow-y-auto p-3 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
           <WeatherWidget />
-        </div>
-      </div>
-
-      <div className="shrink-0 border-t border-border">
-        <SectionHeader icon={Plane} label="København Lufthavn" />
-        <div className="p-3">
-          <FlightBoard />
         </div>
       </div>
     </aside>
