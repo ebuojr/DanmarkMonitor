@@ -27,14 +27,14 @@ type RawVehicle = [
   number,   // [1] x (lon * 1e6)
   number,   // [2] y (lat * 1e6)
   string,   // [3] journeyRef
-  string,   // [4] delay string
+  string,   // [4] heading sector (0-31, unused; not a delay)
   number,   // [5] category code
-  string,   // [6] unknown
-  string,   // [7] next stop
+  string,   // [6] unknown status flag (unused; not a platform)
+  string,   // [7] destination
   unknown,  // [8] trajectory
-  string,   // [9] destination
+  string,   // [9] previous stop
   string,   // [10] unknown
-  string,   // [11] previous stop
+  string,   // [11] next stop
   ...unknown[]
 ]
 
@@ -99,13 +99,10 @@ export async function fetchLiveVehicles(viewport?: ViewportBbox): Promise<Vehicl
       const lon = v[1] / 1_000_000
       const lat = v[2] / 1_000_000
       const journeyRef = String(v[3])
-      const delayRaw = String(v[4] ?? '').trim()
-      const delay = delayRaw !== '' && !isNaN(Number(delayRaw)) ? parseInt(delayRaw, 10) : undefined
       const category = Number(v[5]) || 0
-      const platform = String(v[6] ?? '').trim() || undefined
-      const nextStop = String(v[7] ?? '').trim()
-      const destination = String(v[9] ?? '').trim()
-      const prevStop = String(v[11] ?? '').trim()
+      const destination = String(v[7] ?? '').trim()
+      const prevStop = String(v[9] ?? '').trim()
+      const nextStop = String(v[11] ?? '').trim()
 
       return {
         id: journeyRef || `v-${i}`,
@@ -118,8 +115,6 @@ export async function fetchLiveVehicles(viewport?: ViewportBbox): Promise<Vehicl
         nextStop,
         prevStop,
         journeyRef,
-        delay,
-        platform,
       }
     })
     .filter((v) => v.lat > 54 && v.lat < 58 && v.lon > 5 && v.lon < 16)

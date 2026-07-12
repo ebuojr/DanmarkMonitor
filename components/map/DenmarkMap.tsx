@@ -11,7 +11,7 @@ import { WIND_TURBINES_GEOJSON } from '@/lib/data/wind-turbines'
 
 type PopupInfo =
   | { kind: 'turbine'; name: string; capacity_mw: number; turbines: number; year: number }
-  | { kind: 'vehicle'; name: string; type: string; destination: string; nextStop: string; prevStop: string; delay?: number; platform?: string }
+  | { kind: 'vehicle'; name: string; type: string; destination: string; nextStop: string; prevStop: string }
   | { kind: 'road'; category: string; title: string; header: string; kommune: string; direction: string; beginPeriod: string; endPeriod: string; description: string }
 
 function stripHtml(html: string): string {
@@ -242,8 +242,8 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
       })
 
       onLayerClick('vehicle-circles', 9, (f) => {
-        const p = f.properties as { name: string; destination: string; nextStop: string; prevStop: string; type: string; delay: number | null; platform: string }
-        return { kind: 'vehicle', name: p.name, type: p.type, destination: p.destination ?? '', nextStop: p.nextStop ?? '', prevStop: p.prevStop ?? '', delay: p.delay ?? undefined, platform: p.platform || undefined }
+        const p = f.properties as { name: string; destination: string; nextStop: string; prevStop: string; type: string }
+        return { kind: 'vehicle', name: p.name, type: p.type, destination: p.destination ?? '', nextStop: p.nextStop ?? '', prevStop: p.prevStop ?? '' }
       })
 
       // ── Road traffic ──────────────────────────────────────────────────────────
@@ -341,7 +341,7 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
         return {
           type: 'Feature',
           geometry: { type: 'Point', coordinates: cur },
-          properties: { id: v.id, name: v.name, type: v.type, destination: v.destination, nextStop: v.nextStop, prevStop: v.prevStop, delay: v.delay ?? null, platform: v.platform ?? '' },
+          properties: { id: v.id, name: v.name, type: v.type, destination: v.destination, nextStop: v.nextStop, prevStop: v.prevStop },
         }
       }),
     }
@@ -454,18 +454,6 @@ export function DenmarkMap({ activeLayers, mapStyle }: Props) {
                   <div className="pt-1.5 border-t border-border/40 space-y-1">
                     {popupInfo.prevStop && <p className="text-muted-foreground">Forrige: {popupInfo.prevStop}</p>}
                     {popupInfo.nextStop && <p className="text-foreground font-medium">Næste: {popupInfo.nextStop}</p>}
-                  </div>
-                )}
-                {(typeof popupInfo.delay === 'number' || popupInfo.platform) && (
-                  <div className="pt-1.5 border-t border-border/40 space-y-1">
-                    {typeof popupInfo.delay === 'number' && (
-                      <p className={popupInfo.delay > 0 ? 'text-red-400' : 'text-green-400'}>
-                        {popupInfo.delay > 0 ? `+${popupInfo.delay} min forsinkelse` : 'Til tiden'}
-                      </p>
-                    )}
-                    {popupInfo.platform && (
-                      <p className="text-muted-foreground">Spor/platform: <span className="text-foreground">{popupInfo.platform}</span></p>
-                    )}
                   </div>
                 )}
               </>
