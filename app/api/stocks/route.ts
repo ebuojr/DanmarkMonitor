@@ -9,8 +9,9 @@ export async function GET() {
     const stocks = await fetchDanishStocks()
     return NextResponse.json({ data: { stocks, updatedAt }, updatedAt })
   } catch (error) {
+    console.error('[api/stocks]', error)
     return NextResponse.json(
-      { data: null, error: error instanceof Error ? error.message : 'Unknown error', updatedAt },
+      { data: null, error: 'Upstream fetch failed', updatedAt },
       { status: 500 }
     )
   }

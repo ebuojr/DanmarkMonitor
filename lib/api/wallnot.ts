@@ -28,6 +28,15 @@ function decodeHtmlEntities(s: string): string {
     .replace(/&aring;/gi, 'a')
 }
 
+function safeHttpUrl(raw: string): string | null {
+  try {
+    const u = new URL(raw)
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null
+  } catch {
+    return null
+  }
+}
+
 export async function fetchWallnotNews(): Promise<Article[]> {
   const res = await fetch(WALLNOT_URL, {
     next: { revalidate: 600 },
@@ -57,7 +66,8 @@ export async function fetchWallnotNews(): Promise<Article[]> {
     const artMatch = inner.match(/<span class="art">\s*<a[^>]+href="([^"]+)"[^>]*>([^<]+)<\/a>/)
     if (!artMatch) continue
 
-    const link = artMatch[1]
+    const link = safeHttpUrl(artMatch[1])
+    if (!link) continue
     const title = decodeHtmlEntities(artMatch[2].trim())
 
     articles.push({ id: link, title, link, pubDate, source })

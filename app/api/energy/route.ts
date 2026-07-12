@@ -7,8 +7,9 @@ export async function GET() {
     const data = await fetchEnergyData()
     return NextResponse.json({ data, updatedAt })
   } catch (error) {
+    console.error('[api/energy]', error)
     return NextResponse.json(
-      { data: null, error: error instanceof Error ? error.message : 'Unknown error', stale: false, updatedAt },
+      { data: null, error: 'Upstream fetch failed', stale: false, updatedAt },
       { status: 500 }
     )
   }

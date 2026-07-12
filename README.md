@@ -28,7 +28,6 @@ Real-time situational awareness dashboard for Denmark. Live map with weather, en
 - **MapLibre GL JS** for all map rendering
 - **Tailwind v4** CSS-only config
 - **SWR** for client-side data polling
-- **hls.js** for live video streaming
 
 All external data is fetched server-side through Next.js API routes — no API keys required.
 
@@ -45,6 +44,8 @@ Open [http://localhost:3000](http://localhost:3000).
 npx tsc --noEmit   # type check
 npm run build      # production build
 ```
+
+Plans for pending improvements live in plans/ — see plans/README.md.
 
 ## License
 

@@ -53,8 +53,9 @@ export async function GET(request: Request) {
     cache.set(key, { at: now, vehicles, updatedAt })
     return NextResponse.json({ data: { vehicles, updatedAt }, updatedAt })
   } catch (error) {
+    console.error('[api/transport/vehicles]', error)
     return NextResponse.json(
-      { data: null, error: error instanceof Error ? error.message : 'Unknown error', updatedAt },
+      { data: null, error: 'Upstream fetch failed', updatedAt },
       { status: 500 }
     )
   }

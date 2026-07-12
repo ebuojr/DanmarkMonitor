@@ -11,8 +11,9 @@ export async function GET() {
     ])
     return NextResponse.json({ data: { stations, warnings, updatedAt }, updatedAt })
   } catch (error) {
+    console.error('[api/weather]', error)
     return NextResponse.json(
-      { data: null, error: error instanceof Error ? error.message : 'Unknown error', stale: false, updatedAt },
+      { data: null, error: 'Upstream fetch failed', stale: false, updatedAt },
       { status: 500 }
     )
   }

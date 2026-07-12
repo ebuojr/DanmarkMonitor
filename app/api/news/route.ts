@@ -7,8 +7,9 @@ export async function GET() {
     const articles = await fetchWallnotNews()
     return NextResponse.json({ data: { articles, updatedAt }, updatedAt })
   } catch (error) {
+    console.error('[api/news]', error)
     return NextResponse.json(
-      { data: null, error: error instanceof Error ? error.message : 'Unknown error', stale: false, updatedAt },
+      { data: null, error: 'Upstream fetch failed', stale: false, updatedAt },
       { status: 500 }
     )
   }

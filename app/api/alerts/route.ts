@@ -26,8 +26,9 @@ export async function GET() {
 
     return NextResponse.json({ data: { alerts, updatedAt }, updatedAt })
   } catch (error) {
+    console.error('[api/alerts]', error)
     return NextResponse.json(
-      { data: null, error: error instanceof Error ? error.message : 'Unknown error', stale: false, updatedAt },
+      { data: null, error: 'Upstream fetch failed', stale: false, updatedAt },
       { status: 500 }
     )
   }
