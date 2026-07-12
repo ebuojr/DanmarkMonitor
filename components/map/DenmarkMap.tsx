@@ -118,13 +118,25 @@ const VEHICLE_COLOR_EXPR: any[] = [
 const BASE_CIRCLE_OPACITY = 0.82
 const DIMMED_OPACITY = 0.25
 const DIMMED_TEXT_OPACITY = 0.3
-// Zoom-interpolated radius shared by turbine/vehicle/road circles; reused
-// (not re-read from the live map) as the non-selected branch of the
-// emphasis effect's radius-bump expression so repeated selection changes
-// can't compound nested case-expressions.
+// Zoom-interpolated radius shared by turbine/vehicle/road circles.
+const RADIUS_STOPS: [zoom: number, radius: number][] = [[5, 4], [9, 7], [12, 10]]
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const CIRCLE_RADIUS_EXPR: any[] = ['interpolate', ['linear'], ['zoom'], 5, 4, 9, 7, 12, 10]
+const CIRCLE_RADIUS_EXPR: any[] = ['interpolate', ['linear'], ['zoom'], ...RADIUS_STOPS.flat()]
 const FLIGHT_RADIUS = 4
+
+// MapLibre requires a zoom ("interpolate"/"step") subexpression to be the
+// TOP-LEVEL expression — it can't be nested inside `case`/`+`/etc, even
+// once. So the selected-feature radius bump can't wrap CIRCLE_RADIUS_EXPR;
+// it has to rebuild the same interpolate with a per-stop `case` as the
+// bumped/unbumped value, using RADIUS_STOPS as the single source of truth
+// so it can never drift from CIRCLE_RADIUS_EXPR's own stops.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function bumpedRadiusExpr(matchExpr: any[], bump: number): any[] {
+  return [
+    'interpolate', ['linear'], ['zoom'],
+    ...RADIUS_STOPS.flatMap(([zoom, radius]) => [zoom, ['case', matchExpr, radius + bump, radius]]),
+  ]
+}
 
 // Three base tile sets — light (CartoDB voyager), dark (CartoDB dark_all), satellite (ESRI)
 const MAP_BASE_STYLE: maplibregl.StyleSpecification = {
@@ -525,9 +537,10 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       map.setPaintProperty('vehicle-circles', 'circle-opacity', [
         'case', ['==', ['get', 'jid'], vehicleJid], 1, DIMMED_OPACITY,
       ])
-      map.setPaintProperty('vehicle-circles', 'circle-radius', [
-        'case', ['==', ['get', 'jid'], vehicleJid], ['+', CIRCLE_RADIUS_EXPR, 2], CIRCLE_RADIUS_EXPR,
-      ])
+      map.setPaintProperty(
+        'vehicle-circles', 'circle-radius',
+        bumpedRadiusExpr(['==', ['get', 'jid'], vehicleJid], 2)
+      )
 
       const flightId = selected.kind === 'flight' ? selected.id : ''
       map.setPaintProperty('flight-icons', 'circle-opacity', [
