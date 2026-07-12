@@ -180,7 +180,7 @@ function LiveClock() {
   useEffect(() => {
     const fmt = () =>
       new Date().toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    setTime(fmt())
+    queueMicrotask(() => setTime(fmt()))
     const id = setInterval(() => setTime(fmt()), 1000)
     return () => clearInterval(id)
   }, [])

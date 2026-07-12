@@ -5,7 +5,7 @@ React 19, TypeScript strict, Tailwind v4 (CSS-only config), SWR polling.
 
 ## Verify changes
 - `npx tsc --noEmit` — typecheck (must pass)
-- `npm run lint` — eslint (has 1 known pre-existing error in CommandCenter.tsx; do not add new ones)
+- `npm run lint` — eslint (no known debt; must exit 0 with zero problems)
 - `npm run build` — production build (must pass; Vercel deploys this)
 - No test suite yet.
 
