@@ -93,34 +93,27 @@ function classifyStops(stops: JourneyStop[], nowMin: number): { statuses: StopSt
 export function JourneyPanel({ jid, name, type, destination, journey, isLoading, onClose }: Props) {
   const color = TYPE_COLOR[type] ?? TYPE_COLOR.other
   const stops = journey?.stops ?? []
+  // Header terminus follows the actual JourneyDetails stop list — the
+  // vehicle-feed dirTxt (the `destination` prop) can advertise a terminus
+  // beyond the segment this journey actually covers (e.g. "Aarhus H" while
+  // the tracked stops end at Fredericia). Prop remains the loading fallback.
+  const headerDestination = stops.length > 0 ? stops[stops.length - 1].name : destination
 
   // Recomputed on every render (cheap — a handful of stops); no need to
   // memoize a "now"-dependent value across renders.
   const { statuses, nextIndex } = classifyStops(stops, nowMinutesCopenhagen())
-  // Marker sits immediately before the next stop; at the end if the vehicle
-  // is at/past its terminus (no upcoming stop found).
-  const markerIndex = nextIndex === -1 ? stops.length : nextIndex
+  // Auto-scroll anchors on the next upcoming stop; when the vehicle is
+  // at/past its terminus, anchor on the last stop instead.
+  const scrollIndex = nextIndex === -1 ? stops.length - 1 : nextIndex
 
-  const markerRef = useRef<HTMLLIElement>(null)
+  const nextStopRef = useRef<HTMLLIElement>(null)
   const scrolledForRef = useRef<string | null>(null)
   useEffect(() => {
     if (isLoading || stops.length === 0) return
     if (scrolledForRef.current === jid) return
     scrolledForRef.current = jid
-    markerRef.current?.scrollIntoView({ block: 'center' })
+    nextStopRef.current?.scrollIntoView({ block: 'center' })
   }, [jid, isLoading, stops.length])
-
-  // "Her nu" — the vehicle's current position between its passed and next
-  // stop. Rendered once and reused at whichever index it belongs at
-  // (including past-the-end, at/after the terminus).
-  const markerRow = (
-    <li key="marker" ref={markerRef} className="flex items-center gap-2 relative -my-1">
-      <span className="w-4 shrink-0 flex justify-center">
-        <span className="relative z-10 text-[10px] animate-pulse" style={{ color }}>▸</span>
-      </span>
-      <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">Her nu</span>
-    </li>
-  )
 
   return (
     <Card className="w-72 max-w-[calc(100vw-1.5rem)] shadow-lg gap-0 py-0">
@@ -140,9 +133,9 @@ export function JourneyPanel({ jid, name, type, destination, journey, isLoading,
         </div>
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
           <Badge variant="secondary">{VEHICLE_LABEL[type] ?? 'Transport'}</Badge>
-          {destination && (
+          {headerDestination && (
             <span className="text-xs text-muted-foreground truncate">
-              → <span className="text-foreground font-medium">{destination}</span>
+              → <span className="text-foreground font-medium">{headerDestination}</span>
             </span>
           )}
         </div>
@@ -171,10 +164,10 @@ export function JourneyPanel({ jid, name, type, destination, journey, isLoading,
                 style={{ borderColor: color, opacity: 0.4 }}
               />
               <ul className="space-y-3">
-                {stops.flatMap((stop, i) => {
+                {stops.map((stop, i) => {
                   const status = statuses[i]
-                  const stopRow = (
-                    <li key={`stop-${i}`} className="flex items-start gap-2 relative">
+                  return (
+                    <li key={`stop-${i}`} ref={i === scrollIndex ? nextStopRef : undefined} className="flex items-start gap-2 relative">
                       <span className="w-4 shrink-0 flex justify-center pt-0.5">
                         <span
                           className={cn(
@@ -200,9 +193,7 @@ export function JourneyPanel({ jid, name, type, destination, journey, isLoading,
                       </div>
                     </li>
                   )
-                  return i === markerIndex ? [markerRow, stopRow] : [stopRow]
                 })}
-                {markerIndex === stops.length && markerRow}
               </ul>
             </div>
           </ScrollArea>

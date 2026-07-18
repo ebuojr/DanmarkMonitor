@@ -20,9 +20,11 @@ const DIRECTIONS: { id: 'D' | 'A'; label: string }[] = [
 
 // Times come from different upstreams in different shapes: CPH sends ISO
 // datetimes, BLL/AAR send bare "HH:MM" strings already in Danish local time.
+// Explicit timeZone so a viewer outside Denmark still sees airport-local
+// times rather than their own.
 function formatTime(value: string): string {
   if (!value.includes('T')) return value
-  return new Date(value).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })
+  return new Date(value).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Copenhagen' })
 }
 
 function PillGroup<T extends string>({
@@ -58,6 +60,8 @@ export function FlightBoard() {
   const [airport, setAirport] = useState<AirportCode>('CPH')
   const [direction, setDirection] = useState<'A' | 'D'>('D')
   const { data, isLoading, error } = useAirportBoard(airport, direction)
+  // Narrowed const so the flights.map callback below keeps the non-null type.
+  const board = data?.data ?? null
 
   return (
     <div className="space-y-2">
@@ -68,15 +72,15 @@ export function FlightBoard() {
 
       {isLoading ? (
         <WidgetSkeleton lines={3} />
-      ) : error || !data?.data ? (
+      ) : error || !board ? (
         <WidgetError label="Flydata utilgængelig" />
-      ) : !data.data.flights.length ? (
+      ) : !board.flights.length ? (
         <p className="text-xs text-muted-foreground">Ingen fly i vinduet</p>
       ) : (
         <ScrollArea className="h-56">
           <ul className="space-y-2 pr-2">
-            {data.data.flights.map((f, i) => (
-              <li key={`${f.iata}-${f.scheduled}-${i}`} className="flex items-start justify-between gap-2 text-xs">
+            {board.flights.map((f, i) => (
+              <li key={`${f.flightNo}-${f.scheduled}-${i}`} className="flex items-start justify-between gap-2 text-xs">
                 <div className="font-mono tabular-nums shrink-0">
                   {f.delayed ? (
                     <div className="flex items-center gap-1.5">
@@ -88,8 +92,15 @@ export function FlightBoard() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-foreground">{f.iata}</p>
-                  <p className="text-muted-foreground truncate">{f.city}</p>
+                  <p className="font-semibold text-foreground">{f.flightNo}</p>
+                  {/* `city` is the OTHER end of the flight — origin on
+                      arrivals, destination on departures — so it needs the
+                      direction prefix to read unambiguously. Derived from
+                      the response's own direction, not the UI toggle, so
+                      the label always matches the rendered rows. */}
+                  <p className="text-muted-foreground truncate">
+                    {board.direction === 'A' ? 'Fra' : 'Til'} {f.city}
+                  </p>
                 </div>
                 <div className="text-right text-muted-foreground shrink-0">
                   {f.gate && <p>{f.gate}</p>}

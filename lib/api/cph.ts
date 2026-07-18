@@ -1,4 +1,5 @@
 import type { BoardFlight } from '@/lib/types/flights'
+import { isDelayed } from '@/lib/api/board-time'
 
 // CPH's own site API — undocumented, unofficial. Treat as change-without-notice.
 const CPH_URL = 'https://www.cph.dk/api/FlightInformation/GetFlightInfoTable'
@@ -42,17 +43,23 @@ export async function fetchCphBoard(direction: 'A' | 'D'): Promise<BoardFlight[]
   const json = await res.json() as RawFlight[]
 
   return json
-    .map((f) => ({
-      iata: (f.Iata ?? '').trim(),
-      airline: (f.Airline ?? '').trim(),
-      city: (f.DestinationName ?? f.Destination ?? '').trim(),
-      scheduled: f.ScheduledDateTime,
-      expected: f.ExpectedDateTime ?? f.ScheduledDateTime,
-      delayed: f.Delayed ?? false,
-      gate: f.Gate || undefined,
-      terminal: f.Terminal || undefined,
-      status: (f.Status ?? '').trim(),
-    }))
+    .map((f) => {
+      const scheduled = f.ScheduledDateTime
+      const expected = f.ExpectedDateTime ?? f.ScheduledDateTime
+      return {
+        flightNo: (f.Iata ?? '').trim(),
+        airline: (f.Airline ?? '').trim(),
+        city: (f.DestinationName ?? f.Destination ?? '').trim(),
+        scheduled,
+        expected,
+        // Upstream's Delayed flag is authoritative when set; the normalized
+        // time comparison catches rows where the flag lags the times.
+        delayed: (f.Delayed ?? false) || isDelayed(scheduled, expected),
+        gate: f.Gate || undefined,
+        terminal: f.Terminal || undefined,
+        status: (f.Status ?? '').trim(),
+      }
+    })
     .sort((a, b) => a.scheduled.localeCompare(b.scheduled))
     .slice(0, 40)
 }

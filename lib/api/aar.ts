@@ -1,4 +1,5 @@
 import type { BoardFlight } from '@/lib/types/flights'
+import { isDelayed } from '@/lib/api/board-time'
 
 // Aarhus Airport server-renders a tabbed flight table on this page — no
 // documented API. Fragile like wallnot.ts: wrap in try/catch, return [] on
@@ -8,8 +9,10 @@ const AAR_URL = 'https://www.aar.dk/flytider/'
 // Rows look like:
 // <tr> <td>21:10<span> </span></td> <td>London <span>FR713</span></td> <td>Ryanair</td> <td class="text-center">4</td> <td></td> </tr>
 // Delayed arrivals carry the new time in the first span, e.g. <span>(11:23)</span>.
+// Whitespace- and attribute-tolerant on purpose: the exact-markup version of
+// this regex silently emptied the board when the page's formatting shifted.
 const ROW_RE =
-  /<tr> <td>(\d{2}:\d{2})<span>([^<]*)<\/span><\/td> <td>([^<]+?) ?<span>([^<]+)<\/span><\/td> <td>([^<]*)<\/td> <td class="text-center">([^<]*)<\/td> <td>([^<]*)<\/td> <\/tr>/g
+  /<tr[^>]*>\s*<td[^>]*>\s*(\d{1,2}[.:]\d{2})\s*<span[^>]*>(.*?)<\/span>\s*<\/td>\s*<td[^>]*>\s*([^<]+?)\s*<span[^>]*>\s*([^<]+?)\s*<\/span>\s*<\/td>\s*<td[^>]*>\s*([^<]*?)\s*<\/td>\s*<td[^>]*>\s*([^<]*?)\s*<\/td>\s*<td[^>]*>\s*([^<]*?)\s*<\/td>\s*<\/tr>/g
 
 function parseTable(html: string, sectionId: string): BoardFlight[] {
   const sectionStart = html.indexOf(`id="${sectionId}"`)
@@ -23,15 +26,16 @@ function parseTable(html: string, sectionId: string): BoardFlight[] {
   const re = new RegExp(ROW_RE.source, ROW_RE.flags)
   let m: RegExpExecArray | null
   while ((m = re.exec(tbody)) !== null) {
-    const [, scheduled, delayInfo, city, iata, airline, gate, status] = m
-    const delayMatch = delayInfo.match(/(\d{2}:\d{2})/)
+    const [, scheduled, delayInfo, city, flightNo, airline, gate, status] = m
+    const delayMatch = delayInfo.match(/(\d{1,2}[.:]\d{2})/)
+    const expected = delayMatch ? delayMatch[1] : scheduled
     flights.push({
-      iata,
+      flightNo,
       airline: airline.trim(),
       city: city.trim(),
       scheduled,
-      expected: delayMatch ? delayMatch[1] : scheduled,
-      delayed: Boolean(delayMatch),
+      expected,
+      delayed: delayMatch ? isDelayed(scheduled, expected) : false,
       gate: gate || undefined,
       status: status.trim(),
     })
@@ -60,7 +64,7 @@ export async function fetchAarBoard(direction: 'A' | 'D'): Promise<BoardFlight[]
     // today's later ones.
     return flights.slice(0, 40)
   } catch (error) {
-    console.warn('[aar] table markup not found', error)
+    console.warn('[aar] parse failed', error)
     return []
   }
 }

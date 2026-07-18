@@ -114,13 +114,15 @@ export function useSearchIndex(query: string) {
 
     for (const a of flightsData?.data?.aircraft ?? []) {
       if (groups.flights.length >= cap) break
-      if (!matches(query, a.callsign, a.airline, a.origin?.name, a.origin?.iata, a.destination?.name, a.destination?.iata)) continue
-      const route = a.origin?.iata && a.destination?.iata ? `${a.origin.iata} → ${a.destination.iata}` : undefined
+      if (!matches(query, a.callsign, a.route?.airline, a.route?.origin.name, a.route?.origin.iata, a.route?.destination.name, a.route?.destination.iata)) continue
+      const routeLabel = a.route && a.route.origin.iata && a.route.destination.iata
+        ? `${a.route.origin.iata} → ${a.route.destination.iata}`
+        : undefined
       groups.flights.push({
         group: 'flights',
         id: a.id,
         primary: a.callsign || 'Ukendt kaldesignal',
-        secondary: [a.airline, route].filter(Boolean).join(' · ') || undefined,
+        secondary: [a.route?.airline, routeLabel].filter(Boolean).join(' · ') || undefined,
         target: { kind: 'flight', id: a.id, lon: a.lon, lat: a.lat },
       })
     }

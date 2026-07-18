@@ -4,6 +4,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import maplibregl from 'maplibre-gl'
 import type { GeoJSON } from 'geojson'
 import { Wind, X, AlertTriangle } from 'lucide-react'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 import { useWeather } from '@/lib/hooks/useWeather'
 import { useVehicles } from '@/lib/hooks/useVehicles'
 import { useJourney } from '@/lib/hooks/useJourney'
@@ -116,8 +118,10 @@ const VEHICLE_COLOR_EXPR: any[] = [
 // selection-emphasis effect restores these exact constants on deselect
 // instead of a second hardcoded copy that could drift from the layer defs.
 const BASE_CIRCLE_OPACITY = 0.82
-const DIMMED_OPACITY = 0.25
-const DIMMED_TEXT_OPACITY = 0.3
+// Subtle focus effect: unselected markers stay clearly legible — the selected
+// feature pops via full opacity + radius bump, not by blacking out the rest.
+const DIMMED_OPACITY = 0.55
+const DIMMED_TEXT_OPACITY = 0.6
 // Zoom-interpolated radius shared by turbine/vehicle/road circles.
 const RADIUS_STOPS: [zoom: number, radius: number][] = [[5, 4], [9, 7], [12, 10]]
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -170,9 +174,12 @@ const MAP_BASE_STYLE: maplibregl.StyleSpecification = {
     },
   },
   layers: [
-    { id: 'base-dark',      type: 'raster', source: 'tiles-dark' },
+    // Mild contrast boost so the tiles' baked-in city labels and roads read
+    // better under the data overlays; satellite imagery is left untouched.
+    { id: 'base-dark',      type: 'raster', source: 'tiles-dark',      paint: { 'raster-contrast': 0.15 } },
     { id: 'base-satellite', type: 'raster', source: 'tiles-satellite', layout: { visibility: 'none' } },
-    { id: 'base-light',     type: 'raster', source: 'tiles-light',     layout: { visibility: 'none' } },
+    { id: 'base-light',     type: 'raster', source: 'tiles-light',     layout: { visibility: 'none' },
+      paint: { 'raster-contrast': 0.1, 'raster-brightness-max': 0.95 } },
   ],
 }
 
@@ -187,12 +194,6 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
   const setSelectedRef = useRef(setSelected)
   useEffect(() => { setSelectedRef.current = setSelected }, [])
   const [vehicleBbox, setVehicleBbox] = useState<{ minLon: number; maxLon: number; minLat: number; maxLat: number } | undefined>(undefined)
-  // Camera as it was right before the FIRST selection in a run (vehicle or
-  // flight) — cleared (and restored to) on deselect. Saved synchronously
-  // inside selectVehicle/selectFlight (same tick as the click/focus flyTo,
-  // before any animation frame runs) so it captures the true pre-move
-  // camera rather than a mid-flight one.
-  const preSelectCamera = useRef<{ center: maplibregl.LngLat; zoom: number } | null>(null)
   // "already fitBounds-ed for this selection" guard — keyed by kind+id so
   // switching selections (or reselecting after a deselect) fits again, but
   // data polls for the SAME selection don't re-fit.
@@ -209,18 +210,10 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
   // opens exactly what clicking the feature would. Refs keep these callable
   // from the map's `load` closure (registered once) without stale state.
   const selectVehicle = (jid: string, name: string, type: VehicleType, destination: string) => {
-    const map = mapRef.current
-    if (map && preSelectCamera.current === null) {
-      preSelectCamera.current = { center: map.getCenter(), zoom: map.getZoom() }
-    }
     setPopupRef.current({ kind: 'vehicle', jid, name, type, destination })
     setSelectedRef.current({ kind: 'vehicle', jid })
   }
   const selectFlight = (id: string) => {
-    const map = mapRef.current
-    if (map && preSelectCamera.current === null) {
-      preSelectCamera.current = { center: map.getCenter(), zoom: map.getZoom() }
-    }
     setPopupRef.current(null)
     setSelectedRef.current({ kind: 'flight', id })
   }
@@ -284,6 +277,19 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left')
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
 
+    // Registered before 'load' — style/tile errors can fire pre-load. Having
+    // ANY 'error' listener suppresses MapLibre's default console.error, so
+    // transient tile fetch failures (flaky Esri satellite endpoint) drop to
+    // debug while everything else still surfaces loudly.
+    map.on('error', (e) => {
+      const err = e.error
+      const isTileNoise =
+        err instanceof maplibregl.AJAXError ||
+        /failed to fetch|networkerror|load failed|timeout|abort/i.test(err?.message ?? '')
+      if (isTileNoise) console.debug('[map] tile/network error:', err?.message ?? err)
+      else console.error('[map]', err)
+    })
+
     map.on('load', () => {
       // ── Weather labels ─────────────────────────────────────────────────────
       map.addSource('weather-stations', { type: 'geojson', data: EMPTY_FC })
@@ -326,16 +332,37 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       map.addSource('journey-route', { type: 'geojson', data: EMPTY_FC })
       map.addSource('journey-stops', { type: 'geojson', data: EMPTY_FC })
 
+      // Dark casing under the route line — gives it definition on the light
+      // and satellite tiles; blends invisibly into the dark tiles.
+      map.addLayer({
+        id: 'journey-route-casing',
+        type: 'line',
+        source: 'journey-route',
+        paint: {
+          'line-color': '#000000',
+          'line-width': 7,
+          'line-opacity': ['case', ['==', ['get', 'phase'], 'ahead'], 0.18, 0.35],
+        },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+      })
+
       map.addLayer({
         id: 'journey-route',
         type: 'line',
         source: 'journey-route',
         paint: {
           'line-color': ['get', 'color'],
-          'line-width': 3.5,
+          'line-width': 4,
           // Traveled portion (or the whole flight's origin->plane leg) full
           // opacity; the portion ahead dims — set on features via `phase`.
-          'line-opacity': ['case', ['==', ['get', 'phase'], 'ahead'], 0.3, 0.9],
+          // Flight routes flagged `mismatch` (typical route implausible for
+          // the live position) render at half strength; vehicle features
+          // carry no `mismatch` property, which evaluates false here.
+          'line-opacity': [
+            '*',
+            ['case', ['==', ['get', 'phase'], 'ahead'], 0.55, 0.9],
+            ['case', ['==', ['get', 'mismatch'], true], 0.5, 1],
+          ],
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       })
@@ -447,6 +474,20 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         selectFlight(p.id ?? '')
       })
 
+      // Click-away deselect: a plain (non-layer) click handler fires on every
+      // click alongside the per-layer ones above; when the click hit no
+      // interactive feature, clear the selection and any open card. Order vs
+      // the layer handlers is irrelevant — this is a no-op on feature hits.
+      map.on('click', (e) => {
+        const hits = map.queryRenderedFeatures(e.point, {
+          layers: ['turbine-circles', 'vehicle-circles', 'road-circles', 'flight-icons'],
+        })
+        if (hits.length === 0) {
+          setPopupRef.current(null)
+          setSelectedRef.current(null)
+        }
+      })
+
       const updateBbox = () => {
         const zoom = map.getZoom()
         if (zoom >= 10) {
@@ -502,22 +543,13 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     ;(map.getSource('vehicles') as maplibregl.GeoJSONSource).setData(vehicleGeoJSON)
   }, [mapReady, vehicleData])
 
-  // ── Camera restore on deselect ─────────────────────────────────────────────
-  // The save happens synchronously in selectVehicle/selectFlight (see above);
-  // this effect only handles the restore half, which has no flyTo-timing
-  // sensitivity. `preSelectCamera.current !== null` is what distinguishes a
-  // real deselect from mount (both have `selected === null` there, but no
-  // saved camera yet).
+  // ── Fitted-key reset on deselect ───────────────────────────────────────────
+  // The camera deliberately stays where it is when a selection closes (no
+  // jump-back); only the "already fitted" guard resets, so reselecting the
+  // same vehicle/flight after a close re-fits its route.
   useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapReady) return
-    if (selected === null && preSelectCamera.current !== null) {
-      const { center, zoom } = preSelectCamera.current
-      map.easeTo({ center, zoom, duration: 600 })
-      preSelectCamera.current = null
-      fittedKeyRef.current = null
-    }
-  }, [mapReady, selected])
+    if (selected === null) fittedKeyRef.current = null
+  }, [selected])
 
   // ── Selection emphasis — dim everything else while something is selected ──
   // The selected vehicle/flight's own layer keeps it at full opacity (+2px
@@ -671,13 +703,23 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     if (selected?.kind === 'flight') {
       const aircraft = flightsData?.data?.aircraft.find((a) => a.id === selected.id)
       if (!aircraft) {
-        // Landed / out of range / dropped by the Danish filter — clear.
+        // Landed / left coverage / stale position dropped — clear.
         // Deferred via queueMicrotask (same convention as LiveClock below)
         // since setState synchronously inside an effect body is disallowed.
         clearRoute()
         queueMicrotask(() => setSelected(null))
         return
       }
+
+      if (!aircraft.route) {
+        // Callsign unresolved (or lookup budget still pending) — the plane
+        // stays selected, there is just no route to draw. fittedKeyRef is
+        // intentionally NOT set here: if a later poll resolves the route,
+        // it draws AND fits once at that point.
+        clearRoute()
+        return
+      }
+      const { origin, destination } = aircraft.route
 
       const selKey = `flight:${selected.id}`
 
@@ -689,11 +731,11 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
             geometry: {
               type: 'LineString',
               coordinates: [
-                [aircraft.origin.lon, aircraft.origin.lat],
+                [origin.lon, origin.lat],
                 [aircraft.lon, aircraft.lat],
               ],
             },
-            properties: { color: FLIGHT_ROUTE_COLOR, phase: 'reached' },
+            properties: { color: FLIGHT_ROUTE_COLOR, phase: 'reached', mismatch: aircraft.routeMismatch === true },
           },
           {
             type: 'Feature',
@@ -701,10 +743,10 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
               type: 'LineString',
               coordinates: [
                 [aircraft.lon, aircraft.lat],
-                [aircraft.destination.lon, aircraft.destination.lat],
+                [destination.lon, destination.lat],
               ],
             },
-            properties: { color: FLIGHT_ROUTE_COLOR, phase: 'ahead' },
+            properties: { color: FLIGHT_ROUTE_COLOR, phase: 'ahead', mismatch: aircraft.routeMismatch === true },
           },
         ],
       })
@@ -713,22 +755,22 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         features: [
           {
             type: 'Feature',
-            geometry: { type: 'Point', coordinates: [aircraft.origin.lon, aircraft.origin.lat] },
-            properties: { name: aircraft.origin.name, color: FLIGHT_ROUTE_COLOR },
+            geometry: { type: 'Point', coordinates: [origin.lon, origin.lat] },
+            properties: { name: origin.name, color: FLIGHT_ROUTE_COLOR },
           },
           {
             type: 'Feature',
-            geometry: { type: 'Point', coordinates: [aircraft.destination.lon, aircraft.destination.lat] },
-            properties: { name: aircraft.destination.name, color: FLIGHT_ROUTE_COLOR },
+            geometry: { type: 'Point', coordinates: [destination.lon, destination.lat] },
+            properties: { name: destination.name, color: FLIGHT_ROUTE_COLOR },
           },
         ],
       })
 
       if (fittedKeyRef.current !== selKey) {
         fitToRoute([
-          [aircraft.origin.lon, aircraft.origin.lat],
+          [origin.lon, origin.lat],
           [aircraft.lon, aircraft.lat],
-          [aircraft.destination.lon, aircraft.destination.lat],
+          [destination.lon, destination.lat],
         ])
         fittedKeyRef.current = selKey
       }
@@ -774,11 +816,26 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     vis('vehicle-circles', activeLayers.has('transport'))
     // journey-route/journey-stops are shared by vehicle journeys AND flight
     // routes now — visible if either layer that can select something is on.
+    vis('journey-route-casing', activeLayers.has('transport') || activeLayers.has('flights'))
     vis('journey-route',   activeLayers.has('transport') || activeLayers.has('flights'))
     vis('journey-stops',   activeLayers.has('transport') || activeLayers.has('flights'))
     vis('road-circles',    activeLayers.has('roadtraffic'))
     vis('flight-icons',    activeLayers.has('flights'))
   }, [mapReady, activeLayers])
+
+  // ── Toggling a layer off also clears its active selection/card ─────────────
+  // Hiding the dots but leaving the panel + route + dim active reads as a bug;
+  // the existing route/emphasis effects handle the cleanup once state clears.
+  useEffect(() => {
+    if (selected?.kind === 'vehicle' && !activeLayers.has('transport')) {
+      setSelected(null)
+      setPopupInfo(null)
+    }
+    if (selected?.kind === 'flight' && !activeLayers.has('flights')) setSelected(null)
+    if (popupInfo?.kind === 'vehicle' && !activeLayers.has('transport')) setPopupInfo(null)
+    if (popupInfo?.kind === 'turbine' && !activeLayers.has('energy')) setPopupInfo(null)
+    if (popupInfo?.kind === 'road' && !activeLayers.has('roadtraffic')) setPopupInfo(null)
+  }, [activeLayers, selected, popupInfo])
 
   // ── Sync base tile layer ───────────────────────────────────────────────────
   useEffect(() => {
@@ -824,9 +881,8 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         <div className="absolute top-3 left-3 z-20">
           <FlightPanel
             callsign={selectedFlight.callsign}
-            airline={selectedFlight.airline}
-            origin={selectedFlight.origin}
-            destination={selectedFlight.destination}
+            route={selectedFlight.route}
+            routeMismatch={selectedFlight.routeMismatch === true}
             alt={selectedFlight.alt}
             speed={selectedFlight.speed}
             onClose={closePopup}
@@ -835,48 +891,54 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       )}
 
       {popupInfo && popupInfo.kind !== 'vehicle' && (
-        <div className="absolute top-3 left-3 z-20 w-64 max-w-[calc(100vw-1.5rem)] rounded-lg bg-background border border-border shadow-lg overflow-hidden">
-          <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/60 bg-muted/30">
-            <div className="flex items-center gap-2">
-              {popupInfo.kind === 'turbine' ? (
-                <Wind size={13} className="text-green-400 shrink-0" />
-              ) : (
-                <AlertTriangle size={13} className="text-orange-400 shrink-0" />
-              )}
-              <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
-                {popupInfo.kind === 'turbine'
-                  ? 'Vindmøllepark'
-                  : (ROAD_LABEL[popupInfo.category] ?? 'Trafikhændelse')}
-              </span>
-            </div>
-            <button onClick={() => setPopupInfo(null)} className="text-muted-foreground hover:text-foreground transition-colors">
-              <X size={13} />
-            </button>
-          </div>
+        <div className="absolute top-3 left-3 z-20">
+          <Card className="w-72 max-w-[calc(100vw-1.5rem)] shadow-lg gap-0 py-0">
+            <CardHeader className="px-3 py-2.5 border-b border-border/60 bg-muted/30 rounded-t-xl">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  {popupInfo.kind === 'turbine' ? (
+                    <Wind size={14} className="text-green-400 shrink-0" />
+                  ) : (
+                    <AlertTriangle size={14} className="text-orange-400 shrink-0" />
+                  )}
+                  <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase truncate">
+                    {popupInfo.kind === 'turbine'
+                      ? 'Vindmøllepark'
+                      : (ROAD_LABEL[popupInfo.category] ?? 'Trafikhændelse')}
+                  </span>
+                </div>
+                <button onClick={() => setPopupInfo(null)} className="text-muted-foreground hover:text-foreground transition-colors shrink-0">
+                  <X size={13} />
+                </button>
+              </div>
+            </CardHeader>
 
-          <div className="px-3 py-2.5 space-y-1.5 text-xs">
-            {popupInfo.kind === 'turbine' ? (
-              <>
-                <p className="text-sm font-semibold text-foreground">{popupInfo.name}</p>
-                <p className="text-muted-foreground">{popupInfo.capacity_mw} MW &middot; {popupInfo.turbines} møller &middot; {popupInfo.year}</p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-semibold text-foreground">{popupInfo.title || popupInfo.header}</p>
-                {popupInfo.kommune && <p className="text-muted-foreground">{popupInfo.kommune}</p>}
-                {popupInfo.direction && <p className="text-muted-foreground">→ {popupInfo.direction}</p>}
-                {(popupInfo.beginPeriod || popupInfo.endPeriod) && (
-                  <div className="pt-1.5 border-t border-border/40 space-y-1">
-                    {popupInfo.beginPeriod && <p className="text-muted-foreground">Fra: {popupInfo.beginPeriod}</p>}
-                    {popupInfo.endPeriod && <p className="text-muted-foreground">Til: {popupInfo.endPeriod}</p>}
-                  </div>
-                )}
-                {popupInfo.description && (
-                  <p className="pt-1.5 border-t border-border/40 text-muted-foreground text-xs leading-relaxed">{stripHtml(popupInfo.description)}</p>
-                )}
-              </>
-            )}
-          </div>
+            <Separator />
+
+            <CardContent className="px-3 py-2.5 flex flex-col gap-1.5 text-xs">
+              {popupInfo.kind === 'turbine' ? (
+                <>
+                  <p className="text-sm font-semibold text-foreground">{popupInfo.name}</p>
+                  <p className="text-muted-foreground">{popupInfo.capacity_mw} MW &middot; {popupInfo.turbines} møller &middot; {popupInfo.year}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold text-foreground">{popupInfo.title || popupInfo.header}</p>
+                  {popupInfo.kommune && <p className="text-muted-foreground">{popupInfo.kommune}</p>}
+                  {popupInfo.direction && <p className="text-muted-foreground">→ {popupInfo.direction}</p>}
+                  {(popupInfo.beginPeriod || popupInfo.endPeriod) && (
+                    <div className="pt-1.5 border-t border-border/40 flex flex-col gap-1">
+                      {popupInfo.beginPeriod && <p className="text-muted-foreground">Fra: {popupInfo.beginPeriod}</p>}
+                      {popupInfo.endPeriod && <p className="text-muted-foreground">Til: {popupInfo.endPeriod}</p>}
+                    </div>
+                  )}
+                  {popupInfo.description && (
+                    <p className="pt-1.5 border-t border-border/40 text-muted-foreground leading-relaxed">{stripHtml(popupInfo.description)}</p>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
 

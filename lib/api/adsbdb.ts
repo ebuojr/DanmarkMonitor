@@ -68,16 +68,20 @@ function pruneAndCap() {
  * and "network/upstream failure" (NOT cached, so a transient blip retries
  * on the next poll instead of permanently excluding the aircraft).
  */
+function getFresh(key: string): CacheEntry | undefined {
+  const hit = cache.get(key)
+  if (!hit) return undefined
+  const ttl = hit.route === null ? NEGATIVE_TTL_MS : POSITIVE_TTL_MS
+  return Date.now() - hit.at < ttl ? hit : undefined
+}
+
 export async function lookupRoute(callsign: string): Promise<FlightRoute | null> {
   const key = callsign.trim().toUpperCase()
   if (!key) return null
 
   const now = Date.now()
-  const hit = cache.get(key)
-  if (hit) {
-    const ttl = hit.route === null ? NEGATIVE_TTL_MS : POSITIVE_TTL_MS
-    if (now - hit.at < ttl) return hit.route
-  }
+  const hit = getFresh(key)
+  if (hit) return hit.route
 
   let json: RawFlightRouteResponse
   try {
@@ -118,12 +122,39 @@ export async function lookupRoute(callsign: string): Promise<FlightRoute | null>
  * Resolve routes for many callsigns at once, using the shared cache and a
  * simple concurrency-limited pool (no new deps) since adsbdb has no batch
  * endpoint.
+ *
+ * Cache hits (positive AND negative) are always served. Cache misses consume
+ * `maxNewLookups`; once spent, remaining unknowns are left out of the result
+ * map (consumers treat missing as "route unknown") and retry on later polls.
+ * Keeps a cold-cache poll bounded instead of firing hundreds of lookups at a
+ * community-run upstream in one go.
  */
-export async function lookupRoutes(callsigns: string[]): Promise<Map<string, FlightRoute | null>> {
+export async function lookupRoutes(
+  callsigns: string[],
+  maxNewLookups = Infinity
+): Promise<Map<string, FlightRoute | null>> {
   const result = new Map<string, FlightRoute | null>()
-  const queue = [...new Set(callsigns)]
-  let i = 0
+  const queue: string[] = []
+  let budget = maxNewLookups
 
+  for (const callsign of new Set(callsigns)) {
+    const key = callsign.trim().toUpperCase()
+    if (!key) {
+      result.set(callsign, null)
+      continue
+    }
+    const hit = getFresh(key)
+    if (hit) {
+      result.set(callsign, hit.route)
+      continue
+    }
+    if (budget > 0) {
+      budget--
+      queue.push(callsign)
+    }
+  }
+
+  let i = 0
   async function worker() {
     while (i < queue.length) {
       const idx = i++

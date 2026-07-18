@@ -1,4 +1,5 @@
 import type { BoardFlight } from '@/lib/types/flights'
+import { isDelayed } from '@/lib/api/board-time'
 
 // Billund's own site — undocumented Umbraco surface controller, no auth.
 // Treat as change-without-notice, same as CPH.
@@ -42,19 +43,27 @@ export async function fetchBllBoard(direction: 'A' | 'D'): Promise<BoardFlight[]
   if (!res.ok) throw new Error(`BLL fetch failed: ${res.status}`)
   const json = await res.json() as RawBoard
 
-  return (json.Today ?? [])
-    .map((f) => {
-      const otherEnd = direction === 'A' ? f.DepartureAirport : f.ArrivalAirport
-      return {
-        iata: (f.AdministratingFlightCode?.Code ?? '').trim(),
-        airline: (f.AdministratingFlightCode?.Airline?.Name ?? '').trim(),
-        city: (otherEnd?.Name ?? '').trim(),
-        scheduled: f.ScheduledTime,
-        expected: f.EstimatedTime || f.ScheduledTime,
-        delayed: Boolean(f.EstimatedTime) && f.EstimatedTime !== f.ScheduledTime,
-        status: (f.StatusComment || f.Status || '').trim(),
-      }
-    })
-    .sort((a, b) => a.scheduled.localeCompare(b.scheduled))
-    .slice(0, 40)
+  const mapFlight = (f: RawFlight): BoardFlight => {
+    const otherEnd = direction === 'A' ? f.DepartureAirport : f.ArrivalAirport
+    return {
+      flightNo: (f.AdministratingFlightCode?.Code ?? '').trim(),
+      airline: (f.AdministratingFlightCode?.Airline?.Name ?? '').trim(),
+      city: (otherEnd?.Name ?? '').trim(),
+      scheduled: f.ScheduledTime,
+      expected: f.EstimatedTime || f.ScheduledTime,
+      // Normalized comparison, not raw string inequality — an upstream that
+      // reformats an identical time must not read as delayed.
+      delayed: f.EstimatedTime ? isDelayed(f.ScheduledTime, f.EstimatedTime) : false,
+      status: (f.StatusComment || f.Status || '').trim(),
+    }
+  }
+
+  // Times are bare "HH:MM", so Today and Tomorrow sort within their own day
+  // and concatenate in day order — a cross-day sort would float tomorrow's
+  // early-morning flights above today's evening ones. Including Tomorrow
+  // keeps the board populated near midnight.
+  const byScheduled = (a: BoardFlight, b: BoardFlight) => a.scheduled.localeCompare(b.scheduled)
+  const today = (json.Today ?? []).map(mapFlight).sort(byScheduled)
+  const tomorrow = (json.Tomorrow ?? []).map(mapFlight).sort(byScheduled)
+  return [...today, ...tomorrow].slice(0, 40)
 }

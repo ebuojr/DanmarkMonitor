@@ -22,9 +22,18 @@ export interface Aircraft {
   heading: number
   speed: number
   category: string
-  airline: string
-  origin: RouteAirport
-  destination: RouteAirport
+  /**
+   * adsbdb's typical route for the callsign — enrichment only, null when the
+   * callsign is unresolved (military/GA/charter) or the lookup budget for the
+   * current poll is spent. May differ from the live filed plan.
+   */
+  route: FlightRoute | null
+  /**
+   * True when the aircraft is well off (>~150 km) the route's
+   * origin→destination great circle — the typical-route data is likely stale
+   * for this leg. Only set when `route` is non-null.
+   */
+  routeMismatch?: boolean
 }
 
 export interface FlightsResponse {
@@ -34,7 +43,8 @@ export interface FlightsResponse {
 }
 
 export interface BoardFlight {
-  iata: string
+  /** Flight number, e.g. "SK932" — not an airport IATA code. */
+  flightNo: string
   airline: string
   city: string
   scheduled: string
