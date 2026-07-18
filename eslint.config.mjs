@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Agent-harness working dirs — stale worktree checkouts (with their own
+    // .next output) and session-history files, not app code.
+    ".claude/**",
+    ".remember/**",
   ]),
 ]);
 

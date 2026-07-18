@@ -14,21 +14,32 @@ React 19, TypeScript strict, Tailwind v4 (CSS-only config), SWR polling.
   shape is always `{ data, error?, updatedAt }`, HTTP 200 or 500.
 - `lib/api/*` — upstream fetch + parse. Vehicles and journeys come from
   Rejseplanen's HAFAS mgate JSON endpoint via `lib/api/hafas.ts` (public web
-  `aid`, ver 1.24; `JourneyGeoPos` for live positions, `JourneyDetails` for
-  full routes; polyline is standard encoded, precision 5). HIGHEST-RISK CODE
+  `aid`, ver 1.24; `JourneyGeoPos` for live positions — issued as TWO
+  parallel PROD-filtered requests, rail (31) + road (992), merged by jid,
+  because a single all-products request saturates its `maxJny` cap with
+  Copenhagen buses and starves out the sparse country-wide trains;
+  `JourneyDetails` for full routes; polyline is standard encoded, precision
+  5). HIGHEST-RISK CODE
   otherwise: hand-rolled UTM32→WGS84 in `app/api/roadtraffic/route.ts`, regex
   HTML scraping in `wallnot.ts`.
 - `lib/hooks/*` — thin SWR polling hooks; shared fetcher in `lib/hooks/fetcher.ts`
   throws on non-2xx.
 - `components/map/DenmarkMap.tsx` — all MapLibre sources/layers/popups.
 - Aircraft positions come from adsb.lol (`lib/api/adsb.ts`, public ADS-B
-  feed, no auth). Each aircraft's route (origin/destination airport, airline)
-  is resolved via adsbdb.com (`lib/api/adsbdb.ts`, free, no auth, no batch
-  endpoint — per-callsign lookups only). `/api/flights` keeps only aircraft
-  whose route touches Denmark (`origin.countryIso === 'DK' ||
-  destination.countryIso === 'DK'`); aircraft whose callsign doesn't resolve
-  are excluded by design (ADS-B alone can't prove a Danish connection) — this
-  deliberately drops military/GA traffic with no filed route. adsbdb returns
+  feed, no auth). `/api/flights` serves EVERY airborne aircraft in the
+  Denmark bbox whose position is fresh (`seen_pos`/`seen` ≤ 60s — stale
+  landed planes are dropped). Each aircraft's route (origin/destination
+  airport, airline) is *optional enrichment* resolved via adsbdb.com
+  (`lib/api/adsbdb.ts`, free, no auth, no batch endpoint — per-callsign
+  lookups only): `Aircraft.route` is `FlightRoute | null`, null for
+  unresolved callsigns (military/GA/charter). adsbdb serves the callsign's
+  *typical* route, not the live filed plan — the UI labels it "Typisk rute",
+  and `Aircraft.routeMismatch` flags planes >150 km off the route's great
+  circle (`lib/geo.ts` cross-track check) so the UI can warn instead of
+  presenting a stale leg (e.g. a BLL→FRA flight whose callsign maps to
+  BUD→FRA) as fact.
+  Cold-cache lookups are budgeted (30/poll, `MAX_NEW_LOOKUPS_PER_POLL` in
+  adsb.ts) so a fleet of unknowns resolves gradually. adsbdb returns
   HTTP 404 (not 200) with `{"response":"unknown callsign"}` for a genuine
   unknown — that's cached negatively (15min TTL); network/timeout failures
   are NOT cached so they retry next poll. Positive lookups cache 6h, capped
@@ -51,7 +62,7 @@ React 19, TypeScript strict, Tailwind v4 (CSS-only config), SWR polling.
     fragility class as `wallnot.ts`. The table covers *two* calendar days
     with no per-row date, so identical flight+time rows can legitimately
     recur (e.g. a daily SK1248 at 12:30 today and tomorrow) — widget list
-    keys must not assume `iata+scheduled` is unique. Fails soft: returns `[]`
+    keys must not assume `flightNo+scheduled` is unique. Fails soft: returns `[]`
     and `console.warn`s on markup drift, letting the route's generic catch
     handle real upstream failure separately.
   - Aalborg and Odense/HCA publish no live flight board anywhere (checked
