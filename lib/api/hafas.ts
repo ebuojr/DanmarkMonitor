@@ -180,24 +180,29 @@ function toLonLat(pos: { x: number; y: number }): [number, number] {
   return [pos.x / 1_000_000, pos.y / 1_000_000]
 }
 
-export async function fetchVehiclePositions(viewport?: ViewportBbox): Promise<Vehicle[]> {
-  const bbox = viewport
-    ? {
-        minx: Math.round(viewport.minLon * 1_000_000),
-        maxx: Math.round(viewport.maxLon * 1_000_000),
-        miny: Math.round(viewport.minLat * 1_000_000),
-        maxy: Math.round(viewport.maxLat * 1_000_000),
-      }
-    : DENMARK_BBOX
+// Product-class masks for the two JourneyGeoPos requests. A single
+// all-products request capped at maxJny gets saturated by the dense
+// Copenhagen bus/metro cluster, crowding out the sparse country-wide trains
+// (the "no trains in Jylland" failure mode) — so rail gets its own request.
+// Disjoint by construction: 31 + 992 = 1023 (every product class).
+const PROD_RAIL = 31 // cls 1+2+4+8+16: IC/ICL, regional, lokalbane, S-tog
+const PROD_ROAD = 992 // the rest: bus classes 32/64/128 + cls 256/512
+const MAX_JNY_PER_REQUEST = 500
 
+async function fetchGeoPos(
+  bbox: { minx: number; maxx: number; miny: number; maxy: number },
+  prodValue: number
+): Promise<Vehicle[]> {
   const res = (await callMgate('JourneyGeoPos', {
     rect: { llCrd: { x: bbox.minx, y: bbox.miny }, urCrd: { x: bbox.maxx, y: bbox.maxy } },
-    maxJny: 500,
+    maxJny: MAX_JNY_PER_REQUEST,
     onlyRT: false,
     trainPosMode: 'CALC',
-    jnyFltrL: [{ type: 'PROD', mode: 'INC', value: 1023 }],
+    jnyFltrL: [{ type: 'PROD', mode: 'INC', value: prodValue }],
   })) as JourneyGeoPosRes
 
+  // prodX indexes into THIS response's prodL, so vehicles must be fully
+  // mapped per-response before results from the two requests are merged.
   const prodL = res.common?.prodL ?? []
   const jnyL = res.jnyL ?? []
 
@@ -218,7 +223,33 @@ export async function fetchVehiclePositions(viewport?: ViewportBbox): Promise<Ve
       }
     })
     .filter((v): v is Vehicle => v !== null)
-    .filter((v) => v.lat > 54 && v.lat < 58 && v.lon > 5 && v.lon < 16)
+}
+
+export async function fetchVehiclePositions(viewport?: ViewportBbox): Promise<Vehicle[]> {
+  const bbox = viewport
+    ? {
+        minx: Math.round(viewport.minLon * 1_000_000),
+        maxx: Math.round(viewport.maxLon * 1_000_000),
+        miny: Math.round(viewport.minLat * 1_000_000),
+        maxy: Math.round(viewport.maxLat * 1_000_000),
+      }
+    : DENMARK_BBOX
+
+  // Fail-loud on either request: a silently dropped rail request would
+  // reintroduce the exact "no trains" regression this split exists to fix.
+  const [rail, road] = await Promise.all([
+    fetchGeoPos(bbox, PROD_RAIL),
+    fetchGeoPos(bbox, PROD_ROAD),
+  ])
+
+  // jid-dedupe (rail wins) — the PROD masks are disjoint so overlap should
+  // not occur, but a Map merge makes that a guarantee rather than a hope.
+  const byJid = new Map<string, Vehicle>()
+  for (const v of [...rail, ...road]) {
+    if (!byJid.has(v.jid)) byJid.set(v.jid, v)
+  }
+
+  return [...byJid.values()].filter((v) => v.lat > 54 && v.lat < 58 && v.lon > 5 && v.lon < 16)
 }
 
 // "HHMMSS" (possibly with a day-offset prefix, length 8) -> "HH:MM" from the
