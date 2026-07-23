@@ -57,11 +57,12 @@ export function MapLegend({
           active={vehicleTypes.size}
           onReset={onVehicleTypesReset}
         >
-          {VEHICLE_TYPES.map(({ type, label, color }) => (
+          {VEHICLE_TYPES.map(({ type, label, color, note }) => (
             <FilterRow
               key={type}
               label={label}
               color={color}
+              note={note}
               active={vehicleTypes.has(type)}
               onToggle={() => onVehicleTypeToggle(type)}
             />
@@ -126,9 +127,10 @@ function LegendGroup({ title, total, active, onReset, children }: GroupProps) {
   )
 }
 
-function FilterRow({ label, color, active, onToggle }: {
+function FilterRow({ label, color, note, active, onToggle }: {
   label: string
   color: string
+  note?: string
   active: boolean
   onToggle: () => void
 }) {
@@ -146,7 +148,10 @@ function FilterRow({ label, color, active, onToggle }: {
         // Hollow dot (border-only) marks a filtered-out type.
         style={active ? { backgroundColor: color, borderColor: 'rgba(0,0,0,0.2)' } : { borderColor: color }}
       />
-      <span className="text-left text-foreground/80">{label}</span>
+      <span className="min-w-0 text-left text-foreground/80">
+        {label}
+        {note && <span className="ml-1.5 text-[10px] text-muted-foreground/70">({note})</span>}
+      </span>
     </button>
   )
 }
