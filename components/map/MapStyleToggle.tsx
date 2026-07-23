@@ -27,7 +27,8 @@ export function MapStyleToggle({ value, onChange, showLabels = false }: Props) {
           title={label}
           aria-pressed={value === id}
           className={cn(
-            'flex items-center justify-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors',
+            // ≥40px touch targets below lg; desktop keeps the dense header fit.
+            'flex items-center justify-center gap-1 rounded px-2 min-h-10 min-w-10 lg:min-h-6 lg:min-w-0 py-0.5 text-xs font-medium transition-colors',
             value === id
               ? 'bg-background text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground'

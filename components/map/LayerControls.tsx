@@ -26,8 +26,10 @@ export function LayerControls({ activeLayers, onToggle }: Props) {
           <button
             key={id}
             onClick={() => onToggle(id)}
+            aria-pressed={active}
             className={cn(
-              'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+              // ≥40px touch targets below lg; desktop keeps the dense header fit.
+              'flex items-center gap-1.5 rounded-md px-3 min-h-10 lg:min-h-7 lg:px-2.5 text-xs font-medium transition-colors',
               active
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'

@@ -11,7 +11,7 @@ import { SectionHeader } from '@/components/ui/section-header'
 
 export function Sidebar() {
   return (
-    <aside className="flex flex-col h-full overflow-y-auto border-l border-border shrink-0 w-full lg:w-96">
+    <aside className="flex flex-col h-full overflow-y-auto overscroll-contain border-l border-border shrink-0 w-full lg:w-96">
       {/* Airports */}
       <div className="shrink-0 border-b border-border">
         <SectionHeader icon={Plane} label="Lufthavne" />
@@ -45,7 +45,9 @@ export function Sidebar() {
       {/* News */}
       <div className="shrink-0 border-b border-border">
         <SectionHeader icon={Newspaper} label="Nyheder" />
-        <div className="py-1">
+        {/* px-1 + the rows' own px-2 lines news text up with the p-3 rhythm
+            of the other sections while keeping the rows' hover inset. */}
+        <div className="px-1 py-1">
           <NewsWidget />
         </div>
       </div>
