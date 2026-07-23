@@ -15,6 +15,7 @@ import { WIND_TURBINES_GEOJSON } from '@/lib/data/wind-turbines'
 import { JourneyPanel } from '@/components/map/JourneyPanel'
 import { FlightPanel } from '@/components/map/FlightPanel'
 import { MapLegend } from '@/components/map/MapLegend'
+import { createSourceAnimator, type SourceAnimator } from '@/lib/map/animateSource'
 import type { VehicleType } from '@/lib/types/transport'
 import { VEHICLE_TYPES, TYPE_COLOR, VEHICLE_COLOR_EXPR, ROAD_CATEGORIES, ROAD_COLOR_EXPR } from '@/lib/map/palette'
 
@@ -166,6 +167,10 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
   // switching selections (or reselecting after a deselect) fits again, but
   // data polls for the SAME selection don't re-fit.
   const fittedKeyRef = useRef<string | null>(null)
+  // Position tweening between polls — created in the map's load handler
+  // (after their sources exist), disposed before map.remove().
+  const vehicleAnimRef = useRef<SourceAnimator | null>(null)
+  const flightAnimRef = useRef<SourceAnimator | null>(null)
 
   const { data: weatherData } = useWeather()
   const { data: vehicleData } = useVehicles(vehicleBbox)
@@ -365,6 +370,10 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
 
       // ── Live vehicles — coloured dots ─────────────────────────────────────
       map.addSource('vehicles', { type: 'geojson', data: EMPTY_FC })
+      // Tween duration slightly under the 30s poll interval so every glide
+      // completes despite SWR timing jitter — continuous crawl, not
+      // dash-and-wait.
+      vehicleAnimRef.current = createSourceAnimator(map, 'vehicles', { durationMs: 25_000 })
 
       map.addLayer({
         id: 'vehicle-circles',
@@ -436,6 +445,8 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       // The '✈' glyph is not present in the demotiles fontstack (renders as
       // tofu/blank), so this ships as a circle layer — mirrors vehicle-circles.
       map.addSource('flights', { type: 'geojson', data: EMPTY_FC })
+      // 15s flight poll → 12s tween, same jitter margin as vehicles.
+      flightAnimRef.current = createSourceAnimator(map, 'flights', { durationMs: 12_000 })
       map.addLayer({
         id: 'flight-icons',
         type: 'circle',
@@ -488,7 +499,14 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     })
 
     mapRef.current = map
-    return () => { map.remove(); mapRef.current = null }
+    return () => {
+      vehicleAnimRef.current?.dispose()
+      vehicleAnimRef.current = null
+      flightAnimRef.current?.dispose()
+      flightAnimRef.current = null
+      map.remove()
+      mapRef.current = null
+    }
   }, [])
 
   // ── Update weather stations ────────────────────────────────────────────────
@@ -508,23 +526,22 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     })
   }, [mapReady, weatherData])
 
-  // ── Update vehicles ────────────────────────────────────────────────────────
+  // ── Update vehicles — fed through the animator, not setData directly, so
+  // dots glide to the fresh positions instead of teleporting each poll.
+  // Keyed by jid: matches selection identity, so the emphasis paint
+  // expressions keep matching mid-tween.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
-
     const vehicles = vehicleData?.data?.vehicles ?? []
-
-    const vehicleGeoJSON: GeoJSON.FeatureCollection = {
-      type: 'FeatureCollection',
-      features: vehicles.map((v) => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [v.lon, v.lat] },
+    vehicleAnimRef.current?.update(
+      vehicles.map((v) => ({
+        id: v.jid,
+        lon: v.lon,
+        lat: v.lat,
         properties: { id: v.id, jid: v.jid, name: v.name, type: v.type, destination: v.destination },
-      })),
-    }
-
-    ;(map.getSource('vehicles') as maplibregl.GeoJSONSource).setData(vehicleGeoJSON)
+      }))
+    )
   }, [mapReady, vehicleData])
 
   // ── Fitted-key reset on deselect ───────────────────────────────────────────
@@ -775,19 +792,19 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     })
   }, [mapReady, roadTrafficData])
 
-  // ── Update live aircraft ───────────────────────────────────────────────────
+  // ── Update live aircraft — same animator treatment as vehicles ────────────
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
     const aircraft = flightsData?.data?.aircraft ?? []
-    ;(map.getSource('flights') as maplibregl.GeoJSONSource).setData({
-      type: 'FeatureCollection',
-      features: aircraft.map((a) => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [a.lon, a.lat] },
+    flightAnimRef.current?.update(
+      aircraft.map((a) => ({
+        id: a.id,
+        lon: a.lon,
+        lat: a.lat,
         properties: { id: a.id, callsign: a.callsign, alt: a.alt, speed: a.speed, heading: a.heading },
-      })),
-    })
+      }))
+    )
   }, [mapReady, flightsData])
 
   // ── Sync data layer visibility ─────────────────────────────────────────────
