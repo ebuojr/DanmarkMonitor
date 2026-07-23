@@ -500,6 +500,13 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     })
 
     mapRef.current = map
+    // Dev-only escape hatch: driving the map from browser-automation
+    // tooling (screenshots, QA scripts) needs a handle — MapLibre exposes
+    // no global. Compiled out of production builds.
+    if (process.env.NODE_ENV === 'development') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__danmarkMap = map
+    }
     })()
 
     return () => {
@@ -525,7 +532,11 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     ;(async () => {
       const style = await getBaseStyle(mapStyle)
       if (cancelled || mapRef.current !== map) return
-      map.setStyle(style)
+      // diff: false is load-bearing. With diffing (the default), a
+      // successful diff between two similar styles applies the delta —
+      // which REMOVES our data layers — and never fires 'style.load', so
+      // addDataLayers below would never run. A full swap always fires it.
+      map.setStyle(style, { diff: false })
       map.once('style.load', () => {
         if (mapRef.current !== map) return
         addDataLayers(map)
