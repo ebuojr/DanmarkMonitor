@@ -126,9 +126,13 @@ const MAP_BASE_STYLE: maplibregl.StyleSpecification = {
     },
   },
   layers: [
-    // Mild contrast boost so the tiles' baked-in city labels and roads read
-    // better under the data overlays; satellite imagery is left untouched.
-    { id: 'base-dark',      type: 'raster', source: 'tiles-dark',      paint: { 'raster-contrast': 0.15 } },
+    // dark_all packs land/water/roads into the bottom ~10% of the luminance
+    // range, so contrast alone pushes near-blacks even darker. Lift the
+    // floor first (brightness-min ≈ the app's --background), then spread the
+    // midtones; slight desaturation keeps the basemap neutral under the
+    // colored data markers. Satellite imagery is left untouched.
+    { id: 'base-dark',      type: 'raster', source: 'tiles-dark',
+      paint: { 'raster-brightness-min': 0.08, 'raster-brightness-max': 0.95, 'raster-contrast': 0.25, 'raster-saturation': -0.1 } },
     { id: 'base-satellite', type: 'raster', source: 'tiles-satellite', layout: { visibility: 'none' } },
     { id: 'base-light',     type: 'raster', source: 'tiles-light',     layout: { visibility: 'none' },
       paint: { 'raster-contrast': 0.1, 'raster-brightness-max': 0.95 } },
