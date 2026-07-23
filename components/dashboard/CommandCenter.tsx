@@ -6,6 +6,8 @@ import { Sun, Moon, Globe, Map, PanelRight, Search } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { NewsTicker } from './NewsTicker'
 import type { LayerType, MapStyle, DenmarkMapHandle } from '@/components/map/DenmarkMap'
+import type { VehicleType } from '@/lib/types/transport'
+import { VEHICLE_TYPE_IDS, ROAD_CATEGORY_IDS } from '@/lib/map/palette'
 import { LayerControls } from '@/components/map/LayerControls'
 import { SearchModal } from '@/components/search/SearchModal'
 import type { SearchResult } from '@/components/search/useSearchIndex'
@@ -28,6 +30,10 @@ const MAP_STYLES: { id: MapStyle; label: string; Icon: React.ComponentType<{ siz
 
 export function CommandCenter() {
   const [activeLayers, setActiveLayers] = useState<Set<LayerType>>(DEFAULT_LAYERS)
+  // Sub-filters within the transport/roadtraffic layers — the map legend's
+  // rows toggle these. Default: everything visible.
+  const [vehicleTypes, setVehicleTypes] = useState<Set<VehicleType>>(() => new Set(VEHICLE_TYPE_IDS))
+  const [roadCategories, setRoadCategories] = useState<Set<string>>(() => new Set(ROAD_CATEGORY_IDS))
   const [mapStyle, setMapStyle] = useState<MapStyle>('dark')
   const [mobileTab, setMobileTab] = useState<MobileTab>('map')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -49,6 +55,26 @@ export function CommandCenter() {
       return next
     })
   }, [])
+
+  const handleVehicleTypeToggle = useCallback((type: VehicleType) => {
+    setVehicleTypes((prev) => {
+      const next = new Set(prev)
+      if (next.has(type)) next.delete(type)
+      else next.add(type)
+      return next
+    })
+  }, [])
+  const handleVehicleTypesReset = useCallback(() => setVehicleTypes(new Set(VEHICLE_TYPE_IDS)), [])
+
+  const handleRoadCategoryToggle = useCallback((category: string) => {
+    setRoadCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(category)) next.delete(category)
+      else next.add(category)
+      return next
+    })
+  }, [])
+  const handleRoadCategoriesReset = useCallback(() => setRoadCategories(new Set(ROAD_CATEGORY_IDS)), [])
 
   // Global ⌘K / Ctrl+K to open the search modal — prevent the browser's own
   // "focus address bar" binding from firing at the same time.
@@ -169,7 +195,17 @@ export function CommandCenter() {
               ))}
             </div>
           </div>
-          <DenmarkMap ref={mapHandle} activeLayers={activeLayers} mapStyle={mapStyle} />
+          <DenmarkMap
+            ref={mapHandle}
+            activeLayers={activeLayers}
+            mapStyle={mapStyle}
+            vehicleTypes={vehicleTypes}
+            roadCategories={roadCategories}
+            onVehicleTypeToggle={handleVehicleTypeToggle}
+            onVehicleTypesReset={handleVehicleTypesReset}
+            onRoadCategoryToggle={handleRoadCategoryToggle}
+            onRoadCategoriesReset={handleRoadCategoriesReset}
+          />
         </div>
 
         <div className={cn('h-full', mobileTab === 'info' ? 'flex' : 'hidden', 'lg:flex')}>

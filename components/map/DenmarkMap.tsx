@@ -14,6 +14,7 @@ import { useFlights } from '@/lib/hooks/useFlights'
 import { WIND_TURBINES_GEOJSON } from '@/lib/data/wind-turbines'
 import { JourneyPanel } from '@/components/map/JourneyPanel'
 import { FlightPanel } from '@/components/map/FlightPanel'
+import { MapLegend } from '@/components/map/MapLegend'
 import type { VehicleType } from '@/lib/types/transport'
 import { VEHICLE_TYPES, TYPE_COLOR, VEHICLE_COLOR_EXPR, ROAD_CATEGORIES, ROAD_COLOR_EXPR } from '@/lib/map/palette'
 
@@ -60,6 +61,12 @@ export type MapStyle  = 'light' | 'dark' | 'satellite'
 interface Props {
   activeLayers: Set<LayerType>
   mapStyle: MapStyle
+  vehicleTypes: Set<VehicleType>
+  roadCategories: Set<string>
+  onVehicleTypeToggle: (type: VehicleType) => void
+  onVehicleTypesReset: () => void
+  onRoadCategoryToggle: (category: string) => void
+  onRoadCategoriesReset: () => void
 }
 
 const DENMARK_CENTER: [number, number] = [10.5, 56.3]
@@ -139,7 +146,12 @@ const MAP_BASE_STYLE: maplibregl.StyleSpecification = {
   ],
 }
 
-export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMap({ activeLayers, mapStyle }, ref) {
+export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMap({
+  activeLayers, mapStyle,
+  vehicleTypes, roadCategories,
+  onVehicleTypeToggle, onVehicleTypesReset,
+  onRoadCategoryToggle, onRoadCategoriesReset,
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [mapReady, setMapReady] = useState(false)
@@ -161,11 +173,26 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
   const { data: journeyData, isLoading: journeyLoading } = useJourney(selected?.kind === 'vehicle' ? selected.jid : null)
   const { data: flightsData } = useFlights()
 
+  // Latest filter sets + enable callbacks, reachable from the map's `load`
+  // closure and the selection helpers below without stale captures.
+  const vehicleTypesRef = useRef(vehicleTypes)
+  vehicleTypesRef.current = vehicleTypes
+  const roadCategoriesRef = useRef(roadCategories)
+  roadCategoriesRef.current = roadCategories
+  const onVehicleTypeToggleRef = useRef(onVehicleTypeToggle)
+  onVehicleTypeToggleRef.current = onVehicleTypeToggle
+  const onRoadCategoryToggleRef = useRef(onRoadCategoryToggle)
+  onRoadCategoryToggleRef.current = onRoadCategoryToggle
+
   // ── Shared selection helpers — click handlers AND focus() (the search
   // modal's entry point) both funnel through these, so selecting a result
   // opens exactly what clicking the feature would. Refs keep these callable
   // from the map's `load` closure (registered once) without stale state.
+  // Selecting a feature whose type/category is filtered out (only reachable
+  // via search focus — hidden dots can't be clicked) re-enables that filter,
+  // otherwise the cleanup effect would instantly close the fresh selection.
   const selectVehicle = (jid: string, name: string, type: VehicleType, destination: string) => {
+    if (!vehicleTypesRef.current.has(type)) onVehicleTypeToggleRef.current(type)
     setPopupRef.current({ kind: 'vehicle', jid, name, type, destination })
     setSelectedRef.current({ kind: 'vehicle', jid })
   }
@@ -178,6 +205,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     setSelectedRef.current(null)
   }
   const selectRoad = (props: RoadProps) => {
+    if (!roadCategoriesRef.current.has(props.category)) onRoadCategoryToggleRef.current(props.category)
     setPopupRef.current({ kind: 'road', ...props })
     setSelectedRef.current(null)
   }
@@ -779,19 +807,49 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     vis('flight-icons',    activeLayers.has('flights'))
   }, [mapReady, activeLayers])
 
+  // ── Per-type sub-filters ───────────────────────────────────────────────────
+  // These effects OWN setFilter on their layers (selection emphasis is
+  // paint-based, so there is no conflict today). If a selection filter is
+  // ever introduced it must compose here as ['all', typeFilter,
+  // selectionFilter] — never call setFilter on these layers elsewhere.
+  // All-selected maps to `null` deliberately: features with values unknown
+  // to the palette (upstream drift) still render in fallback gray; any
+  // subset filter hides them.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    map.setFilter(
+      'vehicle-circles',
+      vehicleTypes.size === VEHICLE_TYPES.length
+        ? null
+        : (['in', ['get', 'type'], ['literal', [...vehicleTypes]]] as unknown as maplibregl.FilterSpecification)
+    )
+    map.setFilter(
+      'road-circles',
+      roadCategories.size === ROAD_CATEGORIES.length
+        ? null
+        : (['in', ['get', 'category'], ['literal', [...roadCategories]]] as unknown as maplibregl.FilterSpecification)
+    )
+  }, [mapReady, vehicleTypes, roadCategories])
+
   // ── Toggling a layer off also clears its active selection/card ─────────────
   // Hiding the dots but leaving the panel + route + dim active reads as a bug;
   // the existing route/emphasis effects handle the cleanup once state clears.
+  // Same rule for sub-filters: filtering out the selected feature's type or
+  // category closes its panel too.
   useEffect(() => {
     if (selected?.kind === 'vehicle' && !activeLayers.has('transport')) {
       setSelected(null)
       setPopupInfo(null)
     }
     if (selected?.kind === 'flight' && !activeLayers.has('flights')) setSelected(null)
-    if (popupInfo?.kind === 'vehicle' && !activeLayers.has('transport')) setPopupInfo(null)
+    if (popupInfo?.kind === 'vehicle' && (!activeLayers.has('transport') || !vehicleTypes.has(popupInfo.type))) {
+      setSelected((s) => (s?.kind === 'vehicle' ? null : s))
+      setPopupInfo(null)
+    }
     if (popupInfo?.kind === 'turbine' && !activeLayers.has('energy')) setPopupInfo(null)
-    if (popupInfo?.kind === 'road' && !activeLayers.has('roadtraffic')) setPopupInfo(null)
-  }, [activeLayers, selected, popupInfo])
+    if (popupInfo?.kind === 'road' && (!activeLayers.has('roadtraffic') || !roadCategories.has(popupInfo.category))) setPopupInfo(null)
+  }, [activeLayers, selected, popupInfo, vehicleTypes, roadCategories])
 
   // ── Sync base tile layer ───────────────────────────────────────────────────
   useEffect(() => {
@@ -898,46 +956,17 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         </div>
       )}
 
-      {(showTransport || showEnergy || showRoadTraffic) && (
-        <div className="absolute bottom-10 left-2 z-10 flex flex-col gap-2 pointer-events-none">
-          {showRoadTraffic && (
-            <div className="rounded-lg bg-background border border-border px-3 py-2 backdrop-blur-sm">
-              <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase mb-2">Veje</p>
-              <div className="space-y-1">
-                {ROAD_CATEGORIES.map(({ category, label, color }) => (
-                  <div key={category} className="flex items-center gap-2 text-xs">
-                    <span className="size-2.5 rounded-full shrink-0 border border-black/20" style={{ backgroundColor: color }} />
-                    <span className="text-foreground/80">{label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {showTransport && (
-            <div className="rounded-lg bg-background border border-border px-3 py-2 backdrop-blur-sm">
-              <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase mb-2">Transport</p>
-              <div className="space-y-1">
-                {VEHICLE_TYPES.map(({ type, label, color }) => (
-                  <div key={type} className="flex items-center gap-2 text-xs">
-                    <span className="size-2.5 rounded-full shrink-0 border border-black/20" style={{ backgroundColor: color }} />
-                    <span className="text-foreground/80">{label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {showEnergy && (
-            <div className="rounded-lg bg-background border border-border px-3 py-2 backdrop-blur-sm">
-              <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase mb-2">Energi</p>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="size-2.5 rounded-full bg-green-400 shrink-0 border border-black/20" />
-                <span className="text-foreground/80">Vindmølleparker</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      <MapLegend
+        showTransport={showTransport}
+        showRoads={showRoadTraffic}
+        showEnergy={showEnergy}
+        vehicleTypes={vehicleTypes}
+        roadCategories={roadCategories}
+        onVehicleTypeToggle={onVehicleTypeToggle}
+        onVehicleTypesReset={onVehicleTypesReset}
+        onRoadCategoryToggle={onRoadCategoryToggle}
+        onRoadCategoriesReset={onRoadCategoriesReset}
+      />
     </div>
   )
 })
