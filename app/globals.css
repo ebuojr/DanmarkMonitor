@@ -133,16 +133,28 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    scrollbar-width: none;
-  }
-  *::-webkit-scrollbar {
-    display: none;
+    /* Thin themed scrollbars instead of hiding them globally — scrollable
+       regions (sidebar, panels) keep their affordance, especially on touch
+       devices without hover. */
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent) transparent;
   }
   body {
     @apply bg-background text-foreground;
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer utilities {
+  /* Opt-out for chrome-less strips (tickers, pill rows) that scroll but
+     must not show a bar. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }
 

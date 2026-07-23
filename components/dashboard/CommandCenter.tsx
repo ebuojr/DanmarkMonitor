@@ -111,7 +111,10 @@ export function CommandCenter() {
   }, [])
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
+    // dvh (not vh): mobile browser chrome must not crop the tab bar or
+    // footer. Top safe-area padding keeps the header clear of the notch —
+    // viewportFit: 'cover' extends the page under it.
+    <div className="flex flex-col h-dvh overflow-hidden bg-background text-foreground pt-[env(safe-area-inset-top)]">
       {/* Header */}
       <header className="shrink-0 flex items-center justify-between gap-4 border-b border-border px-4 h-11">
         <div className="flex items-center gap-3">

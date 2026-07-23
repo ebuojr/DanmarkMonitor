@@ -145,7 +145,7 @@ export function JourneyPanel({ jid, name, type, destination, journey, isLoading,
         ) : !journey || journey.stops.length === 0 ? (
           <p className="text-xs text-muted-foreground">Rute utilgængelig</p>
         ) : (
-          <ScrollArea className="h-56 max-h-[40vh]">
+          <ScrollArea className="h-56 max-h-[40dvh]">
             <div className="relative pr-2">
               {/* Gutter is w-4 (16px); the line sits at its horizontal
                   center (left-2 = 8px) so dots — rendered centered inside

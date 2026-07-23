@@ -53,11 +53,11 @@ export function SearchModal({ onClose, onSelect }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-[10vh] px-4"
+      className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-[10dvh] px-4"
       onClick={onClose}
     >
       <div
-        className="flex w-full max-w-lg w-[calc(100vw-2rem)] max-h-[min(76vh,42rem)] flex-col rounded-xl border border-border bg-background shadow-2xl overflow-hidden"
+        className="flex w-full max-w-lg w-[calc(100vw-2rem)] max-h-[min(76dvh,42rem)] flex-col rounded-xl border border-border bg-background shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-border px-3.5 py-1.5">
