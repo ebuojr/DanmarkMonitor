@@ -8,6 +8,7 @@ import { NewsTicker } from './NewsTicker'
 import type { LayerType, MapStyle, DenmarkMapHandle } from '@/components/map/DenmarkMap'
 import type { VehicleType } from '@/lib/types/transport'
 import { VEHICLE_TYPE_IDS, ROAD_CATEGORY_IDS } from '@/lib/map/palette'
+import { useLocalStorageState, setCodec, enumCodec } from '@/lib/hooks/useLocalStorageState'
 import { LayerControls } from '@/components/map/LayerControls'
 import { SearchModal } from '@/components/search/SearchModal'
 import type { SearchResult } from '@/components/search/useSearchIndex'
@@ -20,7 +21,16 @@ const DenmarkMap = dynamic(() => import('@/components/map/DenmarkMap').then((m) 
 
 type MobileTab = 'map' | 'info'
 
-const DEFAULT_LAYERS: Set<LayerType> = new Set(['weather', 'energy', 'transport', 'roadtraffic', 'flights'])
+const ALL_LAYERS: readonly LayerType[] = ['weather', 'energy', 'transport', 'roadtraffic', 'flights']
+const DEFAULT_LAYERS: Set<LayerType> = new Set(ALL_LAYERS)
+
+// Persisted user choices — hydration-safe (defaults first paint, storage
+// after mount), tolerant of corrupt/stale values. Bump .v1 on breaking
+// shape changes.
+const LAYERS_CODEC = setCodec(ALL_LAYERS)
+const VEHICLE_TYPES_CODEC = setCodec(VEHICLE_TYPE_IDS)
+const ROAD_CATEGORIES_CODEC = setCodec(ROAD_CATEGORY_IDS)
+const MAP_STYLE_CODEC = enumCodec<MapStyle>(['light', 'dark', 'satellite'])
 
 const MAP_STYLES: { id: MapStyle; label: string; Icon: React.ComponentType<{ size?: number }> }[] = [
   { id: 'light',     label: 'Lys',      Icon: Sun   },
@@ -29,12 +39,18 @@ const MAP_STYLES: { id: MapStyle; label: string; Icon: React.ComponentType<{ siz
 ]
 
 export function CommandCenter() {
-  const [activeLayers, setActiveLayers] = useState<Set<LayerType>>(DEFAULT_LAYERS)
+  const [activeLayers, setActiveLayers] = useLocalStorageState(
+    'danmark-monitor.active-layers.v1', DEFAULT_LAYERS, LAYERS_CODEC)
   // Sub-filters within the transport/roadtraffic layers — the map legend's
   // rows toggle these. Default: everything visible.
-  const [vehicleTypes, setVehicleTypes] = useState<Set<VehicleType>>(() => new Set(VEHICLE_TYPE_IDS))
-  const [roadCategories, setRoadCategories] = useState<Set<string>>(() => new Set(ROAD_CATEGORY_IDS))
-  const [mapStyle, setMapStyle] = useState<MapStyle>('dark')
+  const [vehicleTypes, setVehicleTypes] = useLocalStorageState<Set<VehicleType>>(
+    'danmark-monitor.vehicle-types.v1', new Set(VEHICLE_TYPE_IDS), VEHICLE_TYPES_CODEC)
+  const [roadCategories, setRoadCategories] = useLocalStorageState<Set<string>>(
+    'danmark-monitor.road-categories.v1', new Set(ROAD_CATEGORY_IDS), ROAD_CATEGORIES_CODEC)
+  // Stored 'light' repaints from the hardcoded dark <html> class one frame
+  // after hydration — accepted; a pre-hydration inline script isn't worth it.
+  const [mapStyle, setMapStyle] = useLocalStorageState<MapStyle>(
+    'danmark-monitor.map-style.v1', 'dark', MAP_STYLE_CODEC)
   const [mobileTab, setMobileTab] = useState<MobileTab>('map')
   const [searchOpen, setSearchOpen] = useState(false)
   const mapHandle = useRef<DenmarkMapHandle>(null)
@@ -54,7 +70,7 @@ export function CommandCenter() {
       else next.add(layer)
       return next
     })
-  }, [])
+  }, [setActiveLayers])
 
   const handleVehicleTypeToggle = useCallback((type: VehicleType) => {
     setVehicleTypes((prev) => {
@@ -63,8 +79,8 @@ export function CommandCenter() {
       else next.add(type)
       return next
     })
-  }, [])
-  const handleVehicleTypesReset = useCallback(() => setVehicleTypes(new Set(VEHICLE_TYPE_IDS)), [])
+  }, [setVehicleTypes])
+  const handleVehicleTypesReset = useCallback(() => setVehicleTypes(new Set(VEHICLE_TYPE_IDS)), [setVehicleTypes])
 
   const handleRoadCategoryToggle = useCallback((category: string) => {
     setRoadCategories((prev) => {
@@ -73,8 +89,8 @@ export function CommandCenter() {
       else next.add(category)
       return next
     })
-  }, [])
-  const handleRoadCategoriesReset = useCallback(() => setRoadCategories(new Set(ROAD_CATEGORY_IDS)), [])
+  }, [setRoadCategories])
+  const handleRoadCategoriesReset = useCallback(() => setRoadCategories(new Set(ROAD_CATEGORY_IDS)), [setRoadCategories])
 
   // Global ⌘K / Ctrl+K to open the search modal — prevent the browser's own
   // "focus address bar" binding from firing at the same time.
