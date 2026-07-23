@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Sun, Moon, Globe, Map, PanelRight, Search } from 'lucide-react'
+import { Map, PanelRight, Search } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { NewsTicker } from './NewsTicker'
 import type { LayerType, MapStyle, DenmarkMapHandle } from '@/components/map/DenmarkMap'
@@ -10,6 +10,7 @@ import type { VehicleType } from '@/lib/types/transport'
 import { VEHICLE_TYPE_IDS, ROAD_CATEGORY_IDS } from '@/lib/map/palette'
 import { useLocalStorageState, setCodec, enumCodec } from '@/lib/hooks/useLocalStorageState'
 import { LayerControls } from '@/components/map/LayerControls'
+import { MapStyleToggle } from '@/components/map/MapStyleToggle'
 import { SearchModal } from '@/components/search/SearchModal'
 import type { SearchResult } from '@/components/search/useSearchIndex'
 import { cn } from '@/lib/utils'
@@ -31,12 +32,6 @@ const LAYERS_CODEC = setCodec(ALL_LAYERS)
 const VEHICLE_TYPES_CODEC = setCodec(VEHICLE_TYPE_IDS)
 const ROAD_CATEGORIES_CODEC = setCodec(ROAD_CATEGORY_IDS)
 const MAP_STYLE_CODEC = enumCodec<MapStyle>(['light', 'dark', 'satellite'])
-
-const MAP_STYLES: { id: MapStyle; label: string; Icon: React.ComponentType<{ size?: number }> }[] = [
-  { id: 'light',     label: 'Lys',      Icon: Sun   },
-  { id: 'dark',      label: 'Mørk',     Icon: Moon  },
-  { id: 'satellite', label: 'Satellit', Icon: Globe },
-]
 
 export function CommandCenter() {
   const [activeLayers, setActiveLayers] = useLocalStorageState(
@@ -159,23 +154,8 @@ export function CommandCenter() {
           </div>
 
           {/* Map style toggle */}
-          <div className="hidden sm:flex items-center gap-0.5 rounded-md border border-border bg-muted p-0.5">
-            {MAP_STYLES.map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                onClick={() => setMapStyle(id)}
-                title={label}
-                className={cn(
-                  'flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors',
-                  mapStyle === id
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <Icon size={12} />
-                <span className="hidden md:inline">{label}</span>
-              </button>
-            ))}
+          <div className="hidden sm:flex">
+            <MapStyleToggle value={mapStyle} onChange={setMapStyle} showLabels />
           </div>
         </div>
 
@@ -195,21 +175,7 @@ export function CommandCenter() {
           {/* Mobile-only map controls bar */}
           <div className="lg:hidden shrink-0 flex items-center justify-between gap-2 px-3 py-1.5 border-b border-border bg-background/90 backdrop-blur-sm">
             <LayerControls activeLayers={activeLayers} onToggle={handleLayerToggle} />
-            <div className="flex items-center gap-0.5 rounded-md border border-border bg-muted p-0.5">
-              {MAP_STYLES.map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setMapStyle(id)}
-                  title={label}
-                  className={cn(
-                    'flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors',
-                    mapStyle === id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <Icon size={12} />
-                </button>
-              ))}
-            </div>
+            <MapStyleToggle value={mapStyle} onChange={setMapStyle} />
           </div>
           <DenmarkMap
             ref={mapHandle}
