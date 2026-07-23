@@ -36,7 +36,20 @@ const STYLE_URLS: Record<'light' | 'dark', string> = {
 interface LayerOverride {
   minzoom?: number
   paint?: Record<string, unknown>
+  /** Full filter replacement (MapLibre expression). */
+  filter?: unknown
 }
+
+// Both OFM styles exclude brunnel=tunnel from their `transit` layers — and
+// the Copenhagen Metro is almost entirely tunnel, so metro (and letbane
+// sections in cuttings) never rendered at all. Replacement filters keep the
+// class check but drop the tunnel exclusion. (Tile data carries transit
+// geometry from ~z13 — earlier than that there is nothing to draw.)
+const TRANSIT_FILTER: unknown = [
+  'all',
+  ['match', ['geometry-type'], ['LineString', 'MultiLineString'], true, false],
+  ['==', ['get', 'class'], 'transit'],
+]
 
 const DARK_OVERRIDES: Record<string, LayerOverride> = {
   // Land/water separation — stock water is 27,27,29 vs 12,12,12 land.
@@ -47,8 +60,10 @@ const DARK_OVERRIDES: Record<string, LayerOverride> = {
   railway_dashline: { minzoom: 8, paint: { 'line-color': '#181820' } },
   railway_minor: { minzoom: 13, paint: { 'line-color': '#565660' } },
   railway_minor_dashline: { minzoom: 13, paint: { 'line-color': '#181820' } },
-  railway_transit: { minzoom: 13, paint: { 'line-color': '#4c4c58' } },
-  railway_transit_dashline: { minzoom: 13, paint: { 'line-color': '#181820' } },
+  // Transit = metro / letbane / tram. Slightly bluer than heavy rail so the
+  // two systems read apart at a glance.
+  railway_transit: { minzoom: 13, filter: TRANSIT_FILTER, paint: { 'line-color': '#6e6e84' } },
+  railway_transit_dashline: { minzoom: 13, filter: TRANSIT_FILTER, paint: { 'line-color': '#181820' } },
   // Road hierarchy: lift each class a step above the background.
   highway_minor: { paint: { 'line-color': '#26262b' } },
   highway_major_inner: { paint: { 'line-color': '#303036' } },
@@ -66,6 +81,13 @@ const DARK_OVERRIDES: Record<string, LayerOverride> = {
   highway_motorway_subtle: { paint: { 'line-color': '#2e2e36' } },
 }
 
+// The bright (light-mode) style needs only the tunnel-unhiding — its stock
+// transit paint is already legible on the light background.
+const BRIGHT_OVERRIDES: Record<string, LayerOverride> = {
+  'railway-transit': { filter: TRANSIT_FILTER },
+  'railway-transit-hatching': { filter: TRANSIT_FILTER },
+}
+
 function applyOverrides(
   style: maplibregl.StyleSpecification,
   overrides: Record<string, LayerOverride>
@@ -77,6 +99,10 @@ function applyOverrides(
     if (o.paint) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(layer as any).paint = { ...(layer as any).paint, ...o.paint }
+    }
+    if (o.filter !== undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(layer as any).filter = o.filter
     }
   }
   return style
@@ -153,7 +179,7 @@ export function getBaseStyle(style: MapStyle): Promise<maplibregl.StyleSpecifica
       if (!res.ok) throw new Error(`style fetch ${res.status}`)
       return res.json() as Promise<maplibregl.StyleSpecification>
     })
-    .then((spec) => (style === 'dark' ? applyOverrides(spec, DARK_OVERRIDES) : spec))
+    .then((spec) => applyOverrides(spec, style === 'dark' ? DARK_OVERRIDES : BRIGHT_OVERRIDES))
     .catch((err) => {
       console.warn(`[map] OpenFreeMap ${style} style unavailable, using raster fallback:`, err)
       cache.delete(style)
