@@ -16,6 +16,9 @@ import { JourneyPanel } from '@/components/map/JourneyPanel'
 import { FlightPanel } from '@/components/map/FlightPanel'
 import { MapLegend } from '@/components/map/MapLegend'
 import { createSourceAnimator, type SourceAnimator } from '@/lib/map/animateSource'
+import { getBaseStyle, MAP_FONT, type MapStyle } from '@/lib/map/baseStyles'
+
+export type { MapStyle } from '@/lib/map/baseStyles'
 import type { VehicleType } from '@/lib/types/transport'
 import { VEHICLE_TYPES, TYPE_COLOR, VEHICLE_COLOR_EXPR, ROAD_CATEGORIES, ROAD_COLOR_EXPR } from '@/lib/map/palette'
 
@@ -57,7 +60,6 @@ function stripHtml(html: string): string {
 }
 
 export type LayerType = 'weather' | 'energy' | 'transport' | 'roadtraffic' | 'flights'
-export type MapStyle  = 'light' | 'dark' | 'satellite'
 
 interface Props {
   activeLayers: Set<LayerType>
@@ -102,50 +104,11 @@ function bumpedRadiusExpr(matchExpr: any[], bump: number): any[] {
   ]
 }
 
-// Three base tile sets — light (CartoDB voyager), dark (CartoDB dark_all), satellite (ESRI)
-const MAP_BASE_STYLE: maplibregl.StyleSpecification = {
-  version: 8,
-  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-  sources: {
-    'tiles-dark': {
-      type: 'raster',
-      tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-      ],
-      tileSize: 256,
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
-    },
-    'tiles-satellite': {
-      type: 'raster',
-      // ESRI World Imagery — free with attribution, note {y}/{x} path order
-      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
-      tileSize: 256,
-      attribution: '© Esri, Maxar, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, GIS User Community',
-    },
-    'tiles-light': {
-      type: 'raster',
-      tiles: [
-        'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-      ],
-      tileSize: 256,
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
-    },
-  },
-  layers: [
-    // dark_all packs land/water/roads into the bottom ~10% of the luminance
-    // range, so contrast alone pushes near-blacks even darker. Lift the
-    // floor first (brightness-min ≈ the app's --background), then spread the
-    // midtones; slight desaturation keeps the basemap neutral under the
-    // colored data markers. Satellite imagery is left untouched.
-    { id: 'base-dark',      type: 'raster', source: 'tiles-dark',
-      paint: { 'raster-brightness-min': 0.08, 'raster-brightness-max': 0.95, 'raster-contrast': 0.25, 'raster-saturation': -0.1 } },
-    { id: 'base-satellite', type: 'raster', source: 'tiles-satellite', layout: { visibility: 'none' } },
-    { id: 'base-light',     type: 'raster', source: 'tiles-light',     layout: { visibility: 'none' },
-      paint: { 'raster-contrast': 0.1, 'raster-brightness-max': 0.95 } },
-  ],
-}
+// Base styles live in lib/map/baseStyles.ts — OpenFreeMap vector for
+// light/dark (railways + the road hierarchy the old Carto rasters lacked),
+// ESRI raster for satellite, Carto raster as offline fallback. Switching
+// styles replaces the WHOLE style (map.setStyle), which wipes our data
+// sources/layers — addDataLayers() re-adds them on every style.load.
 
 export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMap({
   activeLayers, mapStyle,
@@ -248,13 +211,183 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     },
   }), [])
 
+  // Style tracking for setStyle-based switching. mapStyleRef carries the
+  // prop into the once-only init effect; appliedStyleRef prevents the
+  // switch effect from re-applying the style the map was created with.
+  const mapStyleRef = useRef(mapStyle)
+  mapStyleRef.current = mapStyle
+  const appliedStyleRef = useRef<MapStyle | null>(null)
+  // Bumped after a style switch re-adds the data layers — every effect that
+  // writes source data / layer state depends on it, so filters, visibility,
+  // selection emphasis and feature data all re-apply to the fresh layers.
+  const [styleEpoch, setStyleEpoch] = useState(0)
+
+  // All app data sources/layers. Called on first load AND after every
+  // map.setStyle (a style swap wipes user-added sources/layers). Event
+  // handlers are NOT registered here — map.on(...) survives setStyle.
+  // Guarded so overlapping style.load events can't double-add.
+  const addDataLayers = (map: maplibregl.Map) => {
+    if (map.getSource('weather-stations')) return
+
+    // ── Weather labels ──────────────────────────────────────────────────────
+    map.addSource('weather-stations', { type: 'geojson', data: EMPTY_FC })
+    map.addLayer({
+      id: 'weather-labels',
+      type: 'symbol',
+      source: 'weather-stations',
+      layout: {
+        'text-field': ['concat', ['to-string', ['round', ['get', 'temperature']]], '°'],
+        'text-font': MAP_FONT,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 5, 18, 10, 26],
+        'text-anchor': 'center',
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+      },
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': 'rgba(0,0,0,0.9)',
+        'text-halo-width': 2,
+      },
+    })
+
+    // ── Wind turbines — simple green dots ───────────────────────────────────
+    map.addSource('wind-turbines', { type: 'geojson', data: WIND_TURBINES_GEOJSON })
+    map.addLayer({
+      id: 'turbine-circles',
+      type: 'circle',
+      source: 'wind-turbines',
+      paint: {
+        'circle-radius': CIRCLE_RADIUS_EXPR,
+        'circle-color': '#4ade80',
+        'circle-opacity': BASE_CIRCLE_OPACITY,
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': 'rgba(255,255,255,0.35)',
+      },
+    })
+
+    // ── Selected journey — route line + stop dots (beneath vehicle dots) ────
+    map.addSource('journey-route', { type: 'geojson', data: EMPTY_FC })
+    map.addSource('journey-stops', { type: 'geojson', data: EMPTY_FC })
+
+    // Dark casing under the route line — gives it definition on the light
+    // and satellite tiles; blends invisibly into the dark tiles.
+    map.addLayer({
+      id: 'journey-route-casing',
+      type: 'line',
+      source: 'journey-route',
+      paint: {
+        'line-color': '#000000',
+        'line-width': 7,
+        'line-opacity': ['case', ['==', ['get', 'phase'], 'ahead'], 0.18, 0.35],
+      },
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+    })
+    map.addLayer({
+      id: 'journey-route',
+      type: 'line',
+      source: 'journey-route',
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 4,
+        // Traveled portion (or the whole flight's origin->plane leg) full
+        // opacity; the portion ahead dims — set on features via `phase`.
+        // Flight routes flagged `mismatch` (typical route implausible for
+        // the live position) render at half strength; vehicle features
+        // carry no `mismatch` property, which evaluates false here.
+        'line-opacity': [
+          '*',
+          ['case', ['==', ['get', 'phase'], 'ahead'], 0.55, 0.9],
+          ['case', ['==', ['get', 'mismatch'], true], 0.5, 1],
+        ],
+      },
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+    })
+    map.addLayer({
+      id: 'journey-stops',
+      type: 'circle',
+      source: 'journey-stops',
+      paint: {
+        'circle-radius': 4,
+        'circle-color': '#ffffff',
+        'circle-stroke-width': 2,
+        'circle-stroke-color': ['get', 'color'],
+      },
+    })
+
+    // ── Live vehicles — coloured dots ───────────────────────────────────────
+    map.addSource('vehicles', { type: 'geojson', data: EMPTY_FC })
+    // Tween duration slightly under the 30s poll interval so every glide
+    // completes despite SWR timing jitter. Animators are created once —
+    // they survive style switches (getSource is resolved per frame).
+    if (!vehicleAnimRef.current) {
+      vehicleAnimRef.current = createSourceAnimator(map, 'vehicles', { durationMs: 25_000 })
+    }
+    map.addLayer({
+      id: 'vehicle-circles',
+      type: 'circle',
+      source: 'vehicles',
+      paint: {
+        'circle-radius': CIRCLE_RADIUS_EXPR,
+        'circle-color': VEHICLE_COLOR_EXPR,
+        'circle-opacity': BASE_CIRCLE_OPACITY,
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': 'rgba(255,255,255,0.35)',
+      },
+    })
+
+    // ── Road traffic ────────────────────────────────────────────────────────
+    map.addSource('road-traffic', { type: 'geojson', data: EMPTY_FC })
+    map.addLayer({
+      id: 'road-circles',
+      type: 'circle',
+      source: 'road-traffic',
+      paint: {
+        'circle-radius': CIRCLE_RADIUS_EXPR,
+        'circle-color': ROAD_COLOR_EXPR,
+        'circle-opacity': BASE_CIRCLE_OPACITY,
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': 'rgba(255,255,255,0.35)',
+      },
+    })
+
+    // ── Live aircraft — ADS-B positions over Denmark ────────────────────────
+    // The '✈' glyph is not present in the fontstack (renders as tofu), so
+    // this ships as a circle layer — mirrors vehicle-circles.
+    map.addSource('flights', { type: 'geojson', data: EMPTY_FC })
+    // 15s flight poll → 12s tween, same jitter margin as vehicles.
+    if (!flightAnimRef.current) {
+      flightAnimRef.current = createSourceAnimator(map, 'flights', { durationMs: 12_000 })
+    }
+    map.addLayer({
+      id: 'flight-icons',
+      type: 'circle',
+      source: 'flights',
+      paint: {
+        'circle-radius': FLIGHT_RADIUS,
+        'circle-color': '#f472b6',
+        'circle-opacity': BASE_CIRCLE_OPACITY,
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': 'rgba(255,255,255,0.35)',
+      },
+    })
+  }
+
   // ── Init map once ──────────────────────────────────────────────────────────
+  // Async: the vector base style JSON is fetched (or falls back to raster)
+  // before the map is constructed — MapLibre then needs no second style
+  // pass on mount.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
+    let cancelled = false
+
+    ;(async () => {
+    const style = await getBaseStyle(mapStyleRef.current)
+    if (cancelled || !containerRef.current || mapRef.current) return
+    appliedStyleRef.current = mapStyleRef.current
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: MAP_BASE_STYLE,
+      style,
       center: DENMARK_CENTER,
       zoom: DENMARK_ZOOM,
       minZoom: 5,
@@ -279,114 +412,13 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       else console.error('[map]', err)
     })
 
+    // Sprite images resolve async after the first tiles render — MapLibre
+    // warns per missing icon in that window. A registered handler downgrades
+    // this to debug; the icons appear once the sprite arrives.
+    map.on('styleimagemissing', (e) => console.debug('[map] style image pending:', e.id))
+
     map.on('load', () => {
-      // ── Weather labels ─────────────────────────────────────────────────────
-      map.addSource('weather-stations', { type: 'geojson', data: EMPTY_FC })
-      map.addLayer({
-        id: 'weather-labels',
-        type: 'symbol',
-        source: 'weather-stations',
-        layout: {
-          'text-field': ['concat', ['to-string', ['round', ['get', 'temperature']]], '°'],
-          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 5, 18, 10, 26],
-          'text-anchor': 'center',
-          'text-allow-overlap': true,
-          'text-ignore-placement': true,
-        },
-        paint: {
-          'text-color': '#ffffff',
-          'text-halo-color': 'rgba(0,0,0,0.9)',
-          'text-halo-width': 2,
-        },
-      })
-
-      // ── Wind turbines — simple green dots ─────────────────────────────────
-      map.addSource('wind-turbines', { type: 'geojson', data: WIND_TURBINES_GEOJSON })
-
-      map.addLayer({
-        id: 'turbine-circles',
-        type: 'circle',
-        source: 'wind-turbines',
-        paint: {
-          'circle-radius': CIRCLE_RADIUS_EXPR,
-          'circle-color': '#4ade80',
-          'circle-opacity': BASE_CIRCLE_OPACITY,
-          'circle-stroke-width': 1.5,
-          'circle-stroke-color': 'rgba(255,255,255,0.35)',
-        },
-      })
-
-      // ── Selected journey — route line + stop dots (beneath vehicle dots) ──
-      map.addSource('journey-route', { type: 'geojson', data: EMPTY_FC })
-      map.addSource('journey-stops', { type: 'geojson', data: EMPTY_FC })
-
-      // Dark casing under the route line — gives it definition on the light
-      // and satellite tiles; blends invisibly into the dark tiles.
-      map.addLayer({
-        id: 'journey-route-casing',
-        type: 'line',
-        source: 'journey-route',
-        paint: {
-          'line-color': '#000000',
-          'line-width': 7,
-          'line-opacity': ['case', ['==', ['get', 'phase'], 'ahead'], 0.18, 0.35],
-        },
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-      })
-
-      map.addLayer({
-        id: 'journey-route',
-        type: 'line',
-        source: 'journey-route',
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': 4,
-          // Traveled portion (or the whole flight's origin->plane leg) full
-          // opacity; the portion ahead dims — set on features via `phase`.
-          // Flight routes flagged `mismatch` (typical route implausible for
-          // the live position) render at half strength; vehicle features
-          // carry no `mismatch` property, which evaluates false here.
-          'line-opacity': [
-            '*',
-            ['case', ['==', ['get', 'phase'], 'ahead'], 0.55, 0.9],
-            ['case', ['==', ['get', 'mismatch'], true], 0.5, 1],
-          ],
-        },
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-      })
-
-      map.addLayer({
-        id: 'journey-stops',
-        type: 'circle',
-        source: 'journey-stops',
-        paint: {
-          'circle-radius': 4,
-          'circle-color': '#ffffff',
-          'circle-stroke-width': 2,
-          'circle-stroke-color': ['get', 'color'],
-        },
-      })
-
-      // ── Live vehicles — coloured dots ─────────────────────────────────────
-      map.addSource('vehicles', { type: 'geojson', data: EMPTY_FC })
-      // Tween duration slightly under the 30s poll interval so every glide
-      // completes despite SWR timing jitter — continuous crawl, not
-      // dash-and-wait.
-      vehicleAnimRef.current = createSourceAnimator(map, 'vehicles', { durationMs: 25_000 })
-
-      map.addLayer({
-        id: 'vehicle-circles',
-        type: 'circle',
-        source: 'vehicles',
-        paint: {
-          'circle-radius': CIRCLE_RADIUS_EXPR,
-          'circle-color': VEHICLE_COLOR_EXPR,
-          'circle-opacity': BASE_CIRCLE_OPACITY,
-          'circle-stroke-width': 1.5,
-          'circle-stroke-color': 'rgba(255,255,255,0.35)',
-        },
-      })
+      addDataLayers(map)
 
       // ── Click handlers — show React panel instead of MapLibre popup ─────────
       const onLayerClick = (layerId: string, maxZoom: number, handle: (f: maplibregl.MapGeoJSONFeature) => void) => {
@@ -412,21 +444,6 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         selectVehicle(p.jid, p.name, p.type, p.destination ?? '')
       })
 
-      // ── Road traffic ──────────────────────────────────────────────────────────
-      map.addSource('road-traffic', { type: 'geojson', data: EMPTY_FC })
-      map.addLayer({
-        id: 'road-circles',
-        type: 'circle',
-        source: 'road-traffic',
-        paint: {
-          'circle-radius': CIRCLE_RADIUS_EXPR,
-          'circle-color': ROAD_COLOR_EXPR,
-          'circle-opacity': BASE_CIRCLE_OPACITY,
-          'circle-stroke-width': 1.5,
-          'circle-stroke-color': 'rgba(255,255,255,0.35)',
-        },
-      })
-
       onLayerClick('road-circles', 9, (f) => {
         const p = f.properties as { category: string; title: string; header: string; kommune: string; direction: string; beginPeriod: string; endPeriod: string; description: string }
         selectRoad({
@@ -439,25 +456,6 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
           endPeriod: p.endPeriod ?? '',
           description: p.description ?? '',
         })
-      })
-
-      // ── Live aircraft — ADS-B positions over Denmark ──────────────────────
-      // The '✈' glyph is not present in the demotiles fontstack (renders as
-      // tofu/blank), so this ships as a circle layer — mirrors vehicle-circles.
-      map.addSource('flights', { type: 'geojson', data: EMPTY_FC })
-      // 15s flight poll → 12s tween, same jitter margin as vehicles.
-      flightAnimRef.current = createSourceAnimator(map, 'flights', { durationMs: 12_000 })
-      map.addLayer({
-        id: 'flight-icons',
-        type: 'circle',
-        source: 'flights',
-        paint: {
-          'circle-radius': FLIGHT_RADIUS,
-          'circle-color': '#f472b6',
-          'circle-opacity': BASE_CIRCLE_OPACITY,
-          'circle-stroke-width': 1.5,
-          'circle-stroke-color': 'rgba(255,255,255,0.35)',
-        },
       })
 
       onLayerClick('flight-icons', 10, (f) => {
@@ -473,10 +471,13 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       // click alongside the per-layer ones above; when the click hit no
       // interactive feature, clear the selection and any open card. Order vs
       // the layer handlers is irrelevant — this is a no-op on feature hits.
+      // Layer ids are filtered to the ones currently present: during a style
+      // switch there is a brief window with no data layers, and
+      // queryRenderedFeatures throws on unknown ids.
       map.on('click', (e) => {
-        const hits = map.queryRenderedFeatures(e.point, {
-          layers: ['turbine-circles', 'vehicle-circles', 'road-circles', 'flight-icons'],
-        })
+        const layers = ['turbine-circles', 'vehicle-circles', 'road-circles', 'flight-icons']
+          .filter((id) => map.getLayer(id) !== undefined)
+        const hits = layers.length === 0 ? [] : map.queryRenderedFeatures(e.point, { layers })
         if (hits.length === 0) {
           setPopupRef.current(null)
           setSelectedRef.current(null)
@@ -499,22 +500,47 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     })
 
     mapRef.current = map
+    })()
+
     return () => {
+      cancelled = true
       vehicleAnimRef.current?.dispose()
       vehicleAnimRef.current = null
       flightAnimRef.current?.dispose()
       flightAnimRef.current = null
-      map.remove()
+      mapRef.current?.remove()
       mapRef.current = null
     }
   }, [])
+
+  // ── Switch base style ──────────────────────────────────────────────────────
+  // map.setStyle replaces everything, so after the new style loads the data
+  // layers are re-added and styleEpoch re-runs every state-applying effect.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    if (appliedStyleRef.current === mapStyle) return
+    appliedStyleRef.current = mapStyle
+    let cancelled = false
+    ;(async () => {
+      const style = await getBaseStyle(mapStyle)
+      if (cancelled || mapRef.current !== map) return
+      map.setStyle(style)
+      map.once('style.load', () => {
+        if (mapRef.current !== map) return
+        addDataLayers(map)
+        setStyleEpoch((e) => e + 1)
+      })
+    })()
+    return () => { cancelled = true }
+  }, [mapReady, mapStyle])
 
   // ── Update weather stations ────────────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
     const stations = weatherData?.data?.stations ?? []
-    ;(map.getSource('weather-stations') as maplibregl.GeoJSONSource).setData({
+    ;(map.getSource('weather-stations') as maplibregl.GeoJSONSource | undefined)?.setData({
       type: 'FeatureCollection',
       features: stations
         .filter((s) => s.temperature !== undefined)
@@ -524,7 +550,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
           properties: { temperature: s.temperature!, stationId: s.stationId },
         })),
     })
-  }, [mapReady, weatherData])
+  }, [mapReady, styleEpoch, weatherData])
 
   // ── Update vehicles — fed through the animator, not setData directly, so
   // dots glide to the fresh positions instead of teleporting each poll.
@@ -542,7 +568,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         properties: { id: v.id, jid: v.jid, name: v.name, type: v.type, destination: v.destination },
       }))
     )
-  }, [mapReady, vehicleData])
+  }, [mapReady, styleEpoch, vehicleData])
 
   // ── Fitted-key reset on deselect ───────────────────────────────────────────
   // The camera deliberately stays where it is when a selection closes (no
@@ -560,6 +586,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
+    if (!map.getLayer('vehicle-circles')) return
 
     if (selected !== null) {
       map.setPaintProperty('turbine-circles', 'circle-opacity', DIMMED_OPACITY)
@@ -591,7 +618,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       map.setPaintProperty('flight-icons', 'circle-opacity', BASE_CIRCLE_OPACITY)
       map.setPaintProperty('flight-icons', 'circle-radius', FLIGHT_RADIUS)
     }
-  }, [mapReady, selected])
+  }, [mapReady, styleEpoch, selected])
 
   // ── Update selected route (vehicle journey OR flight origin→plane→dest) ────
   // Both branches share the `journey-route` / `journey-stops` sources (they
@@ -607,8 +634,8 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     if (!map || !mapReady) return
 
     const clearRoute = () => {
-      ;(map.getSource('journey-route') as maplibregl.GeoJSONSource).setData(EMPTY_FC)
-      ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource).setData(EMPTY_FC)
+      ;(map.getSource('journey-route') as maplibregl.GeoJSONSource | undefined)?.setData(EMPTY_FC)
+      ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource | undefined)?.setData(EMPTY_FC)
     }
 
     // Fits the given coordinates into the visible map area, panel-aware —
@@ -681,11 +708,11 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         }
       }
 
-      ;(map.getSource('journey-route') as maplibregl.GeoJSONSource).setData({
+      ;(map.getSource('journey-route') as maplibregl.GeoJSONSource | undefined)?.setData({
         type: 'FeatureCollection',
         features: routeFeatures,
       })
-      ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource).setData({
+      ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource | undefined)?.setData({
         type: 'FeatureCollection',
         features: journey.stops.map((s) => ({
           type: 'Feature',
@@ -724,7 +751,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
 
       const selKey = `flight:${selected.id}`
 
-      ;(map.getSource('journey-route') as maplibregl.GeoJSONSource).setData({
+      ;(map.getSource('journey-route') as maplibregl.GeoJSONSource | undefined)?.setData({
         type: 'FeatureCollection',
         features: [
           {
@@ -751,7 +778,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
           },
         ],
       })
-      ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource).setData({
+      ;(map.getSource('journey-stops') as maplibregl.GeoJSONSource | undefined)?.setData({
         type: 'FeatureCollection',
         features: [
           {
@@ -779,18 +806,18 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     }
 
     clearRoute()
-  }, [mapReady, selected, journeyData, flightsData, popupInfo, vehicleData])
+  }, [mapReady, styleEpoch, selected, journeyData, flightsData, popupInfo, vehicleData])
 
   // ── Update road traffic ───────────────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
     const features = roadTrafficData?.data?.features ?? []
-    ;(map.getSource('road-traffic') as maplibregl.GeoJSONSource).setData({
+    ;(map.getSource('road-traffic') as maplibregl.GeoJSONSource | undefined)?.setData({
       type: 'FeatureCollection',
       features,
     })
-  }, [mapReady, roadTrafficData])
+  }, [mapReady, styleEpoch, roadTrafficData])
 
   // ── Update live aircraft — same animator treatment as vehicles ────────────
   useEffect(() => {
@@ -805,12 +832,15 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         properties: { id: a.id, callsign: a.callsign, alt: a.alt, speed: a.speed, heading: a.heading },
       }))
     )
-  }, [mapReady, flightsData])
+  }, [mapReady, styleEpoch, flightsData])
 
   // ── Sync data layer visibility ─────────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
+    // Data layers are briefly absent while a style switch loads; the epoch
+    // bump re-runs this once they're back.
+    if (!map.getLayer('vehicle-circles')) return
     const vis = (id: string, show: boolean) => map.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none')
     vis('weather-labels',  activeLayers.has('weather'))
     vis('turbine-circles', activeLayers.has('energy'))
@@ -822,7 +852,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     vis('journey-stops',   activeLayers.has('transport') || activeLayers.has('flights'))
     vis('road-circles',    activeLayers.has('roadtraffic'))
     vis('flight-icons',    activeLayers.has('flights'))
-  }, [mapReady, activeLayers])
+  }, [mapReady, styleEpoch, activeLayers])
 
   // ── Per-type sub-filters ───────────────────────────────────────────────────
   // These effects OWN setFilter on their layers (selection emphasis is
@@ -835,6 +865,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
+    if (!map.getLayer('vehicle-circles')) return
     map.setFilter(
       'vehicle-circles',
       vehicleTypes.size === VEHICLE_TYPES.length
@@ -847,7 +878,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         ? null
         : (['in', ['get', 'category'], ['literal', [...roadCategories]]] as unknown as maplibregl.FilterSpecification)
     )
-  }, [mapReady, vehicleTypes, roadCategories])
+  }, [mapReady, styleEpoch, vehicleTypes, roadCategories])
 
   // ── Toggling a layer off also clears its active selection/card ─────────────
   // Hiding the dots but leaving the panel + route + dim active reads as a bug;
@@ -867,16 +898,6 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     if (popupInfo?.kind === 'turbine' && !activeLayers.has('energy')) setPopupInfo(null)
     if (popupInfo?.kind === 'road' && (!activeLayers.has('roadtraffic') || !roadCategories.has(popupInfo.category))) setPopupInfo(null)
   }, [activeLayers, selected, popupInfo, vehicleTypes, roadCategories])
-
-  // ── Sync base tile layer ───────────────────────────────────────────────────
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapReady) return
-    const vis = (id: string, show: boolean) => map.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none')
-    vis('base-dark',      mapStyle === 'dark')
-    vis('base-satellite', mapStyle === 'satellite')
-    vis('base-light',     mapStyle === 'light')
-  }, [mapReady, mapStyle])
 
   const showTransport = activeLayers.has('transport')
   const showEnergy    = activeLayers.has('energy')

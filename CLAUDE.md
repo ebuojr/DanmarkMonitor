@@ -25,6 +25,15 @@ React 19, TypeScript strict, Tailwind v4 (CSS-only config), SWR polling.
 - `lib/hooks/*` — thin SWR polling hooks; shared fetcher in `lib/hooks/fetcher.ts`
   throws on non-2xx.
 - `components/map/DenmarkMap.tsx` — all MapLibre sources/layers/popups.
+  Basemaps (`lib/map/baseStyles.ts`): OpenFreeMap VECTOR styles for
+  light (`bright`) and dark (`dark` + legibility overrides on the near-black
+  stock rail/road/water paint) — free, no key; ESRI raster for satellite;
+  Carto raster as offline fallback if the OFM style JSON fetch fails.
+  Style switching is `map.setStyle()` — that WIPES app sources/layers, so
+  `addDataLayers()` re-adds them on every `style.load` and a `styleEpoch`
+  state bump re-runs all state-applying effects (data, visibility, filters,
+  selection emphasis). Event handlers registered via `map.on(...)` survive
+  setStyle and are registered once at init.
 - Aircraft positions come from adsb.lol (`lib/api/adsb.ts`, public ADS-B
   feed, no auth). `/api/flights` serves EVERY airborne aircraft in the
   Denmark bbox whose position is fresh (`seen_pos`/`seen` ≤ 60s — stale
