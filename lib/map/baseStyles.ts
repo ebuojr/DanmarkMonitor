@@ -60,10 +60,27 @@ const DARK_OVERRIDES: Record<string, LayerOverride> = {
   railway_dashline: { minzoom: 8, paint: { 'line-color': '#181820' } },
   railway_minor: { minzoom: 13, paint: { 'line-color': '#565660' } },
   railway_minor_dashline: { minzoom: 13, paint: { 'line-color': '#181820' } },
-  // Transit = metro / letbane / tram. Slightly bluer than heavy rail so the
-  // two systems read apart at a glance.
-  railway_transit: { minzoom: 13, filter: TRANSIT_FILTER, paint: { 'line-color': '#6e6e84' } },
-  railway_transit_dashline: { minzoom: 13, filter: TRANSIT_FILTER, paint: { 'line-color': '#181820' } },
+  // Transit = metro / letbane / tram. The planet tiles carry transit
+  // geometry from z11 (verified against the live source, not the schema
+  // docs), so the whole city view gets the lines. Slate-purple echoes the
+  // app's metro marker color and separates transit from heavy rail's gray
+  // at a glance; width scales with zoom (stock was a constant 3px).
+  railway_transit: {
+    minzoom: 11,
+    filter: TRANSIT_FILTER,
+    paint: {
+      'line-color': '#9a98c4',
+      'line-width': ['interpolate', ['exponential', 1.3], ['zoom'], 11, 2, 14, 3.2, 17, 6],
+    },
+  },
+  railway_transit_dashline: {
+    minzoom: 11,
+    filter: TRANSIT_FILTER,
+    paint: {
+      'line-color': '#15151d',
+      'line-width': ['interpolate', ['exponential', 1.3], ['zoom'], 11, 1, 14, 1.8, 17, 4],
+    },
+  },
   // Road hierarchy: lift each class a step above the background.
   highway_minor: { paint: { 'line-color': '#26262b' } },
   highway_major_inner: { paint: { 'line-color': '#303036' } },
