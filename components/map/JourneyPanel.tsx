@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { Journey, JourneyStop, VehicleType } from '@/lib/types/transport'
+import { TYPE_COLOR } from '@/lib/map/palette'
 
 const VEHICLE_LABEL: Record<VehicleType, string> = {
   ic: 'IC / Lyntog',
@@ -16,15 +17,6 @@ const VEHICLE_LABEL: Record<VehicleType, string> = {
   metro: 'Metro',
   bus: 'Bus',
   other: 'Transport',
-}
-
-const TYPE_COLOR: Record<VehicleType, string> = {
-  ic: '#f59e0b',
-  regional: '#fb923c',
-  stog: '#60a5fa',
-  metro: '#a78bfa',
-  bus: '#4ade80',
-  other: '#94a3b8',
 }
 
 interface Props {

@@ -15,6 +15,7 @@ import { WIND_TURBINES_GEOJSON } from '@/lib/data/wind-turbines'
 import { JourneyPanel } from '@/components/map/JourneyPanel'
 import { FlightPanel } from '@/components/map/FlightPanel'
 import type { VehicleType } from '@/lib/types/transport'
+import { VEHICLE_TYPES, TYPE_COLOR, VEHICLE_COLOR_EXPR, ROAD_CATEGORIES, ROAD_COLOR_EXPR } from '@/lib/map/palette'
 
 type TurbineProps = { name: string; capacity_mw: number; turbines: number; year: number }
 type RoadProps = { category: string; title: string; header: string; kommune: string; direction: string; beginPeriod: string; endPeriod: string; description: string }
@@ -53,33 +54,6 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ROAD_COLOR_EXPR: any[] = [
-  'match', ['get', 'category'],
-  'roadblocks',                  '#ef4444',
-  'blocking-roadwork',           '#f43f5e',
-  'blocking-events',             '#dc2626',
-  'roadwork',                    '#fb923c',
-  'other-traffic-announcements', '#f97316',
-  'events',                      '#eab308',
-  'queue',                       '#a78bfa',
-  'ice-snow',                    '#7dd3fc',
-  'winther-road',                '#93c5fd',
-  '#94a3b8',
-]
-
-const ROAD_CATEGORIES: { category: string; label: string; color: string }[] = [
-  { category: 'roadblocks',                  label: 'Vejspærring',           color: '#ef4444' },
-  { category: 'blocking-roadwork',           label: 'Blok. vejarbejde',      color: '#f43f5e' },
-  { category: 'blocking-events',             label: 'Blok. hændelse',        color: '#dc2626' },
-  { category: 'roadwork',                    label: 'Vejarbejde',            color: '#fb923c' },
-  { category: 'other-traffic-announcements', label: 'Trafikmeddelelse',      color: '#f97316' },
-  { category: 'events',                      label: 'Hændelse',              color: '#eab308' },
-  { category: 'queue',                       label: 'Kødannelse',            color: '#a78bfa' },
-  { category: 'ice-snow',                    label: 'Is / sne',              color: '#7dd3fc' },
-  { category: 'winther-road',                label: 'Vintervej',             color: '#93c5fd' },
-]
-
 export type LayerType = 'weather' | 'energy' | 'transport' | 'roadtraffic' | 'flights'
 export type MapStyle  = 'light' | 'dark' | 'satellite'
 
@@ -91,28 +65,6 @@ interface Props {
 const DENMARK_CENTER: [number, number] = [10.5, 56.3]
 const DENMARK_ZOOM = 6
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
-
-const VEHICLE_TYPES = [
-  { type: 'ic',       label: 'IC / Lyntog', color: '#f59e0b' },
-  { type: 'regional', label: 'Regional',    color: '#fb923c' },
-  { type: 'stog',     label: 'S-tog',       color: '#60a5fa' },
-  { type: 'metro',    label: 'Metro',       color: '#a78bfa' },
-  { type: 'bus',      label: 'Bus',         color: '#4ade80' },
-  { type: 'other',    label: 'Andet',       color: '#94a3b8' },
-]
-
-const TYPE_COLOR: Record<string, string> = Object.fromEntries(VEHICLE_TYPES.map(({ type, color }) => [type, color]))
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const VEHICLE_COLOR_EXPR: any[] = [
-  'match', ['get', 'type'],
-  'ic',       '#f59e0b',
-  'regional', '#fb923c',
-  'stog',     '#60a5fa',
-  'metro',    '#a78bfa',
-  'bus',      '#4ade80',
-  '#94a3b8',
-]
 
 // Shared base paint values for the four dimmable circle/label layers — the
 // selection-emphasis effect restores these exact constants on deselect
