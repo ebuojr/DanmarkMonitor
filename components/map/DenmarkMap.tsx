@@ -12,6 +12,7 @@ import { useJourney } from '@/lib/hooks/useJourney'
 import { useRoadTraffic } from '@/lib/hooks/useRoadTraffic'
 import { useFlights } from '@/lib/hooks/useFlights'
 import { WIND_TURBINES_GEOJSON } from '@/lib/data/wind-turbines'
+import { METRO_LINES_GEOJSON } from '@/lib/data/metro-lines'
 import { JourneyPanel } from '@/components/map/JourneyPanel'
 import { FlightPanel } from '@/components/map/FlightPanel'
 import { MapLegend } from '@/components/map/MapLegend'
@@ -263,6 +264,35 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         'circle-stroke-width': 1.5,
         'circle-stroke-color': 'rgba(255,255,255,0.35)',
       },
+    })
+
+    // ── Metro & letbane network — static line overlay ───────────────────────
+    // The vector basemap only carries transit geometry from ~z11 and never at
+    // country zoom, and Rejseplanen has NO live metro positions — so the
+    // driverless metro (and letbane) is drawn from a baked OSM dataset as its
+    // own always-on lines, visible at every zoom like the bus dots. A dark
+    // casing lifts the colored line off the dark tiles.
+    map.addSource('metro-lines', { type: 'geojson', data: METRO_LINES_GEOJSON })
+    map.addLayer({
+      id: 'metro-lines-casing',
+      type: 'line',
+      source: 'metro-lines',
+      paint: {
+        'line-color': '#000000',
+        'line-opacity': 0.5,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.5, 11, 4, 16, 8],
+      },
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+    })
+    map.addLayer({
+      id: 'metro-lines',
+      type: 'line',
+      source: 'metro-lines',
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1.5, 11, 2.5, 16, 5],
+      },
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
     })
 
     // ── Selected journey — route line + stop dots (beneath vehicle dots) ────
@@ -863,7 +893,13 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     vis('journey-stops',   activeLayers.has('transport') || activeLayers.has('flights'))
     vis('road-circles',    activeLayers.has('roadtraffic'))
     vis('flight-icons',    activeLayers.has('flights'))
-  }, [mapReady, styleEpoch, activeLayers])
+    // Metro/letbane lines: on with the Transport layer, and the "Metro"
+    // legend row toggles them (metro has no live dots, so that row drives
+    // the network overlay instead of a filter that would match nothing).
+    const showMetro = activeLayers.has('transport') && vehicleTypes.has('metro')
+    vis('metro-lines-casing', showMetro)
+    vis('metro-lines', showMetro)
+  }, [mapReady, styleEpoch, activeLayers, vehicleTypes])
 
   // ── Per-type sub-filters ───────────────────────────────────────────────────
   // These effects OWN setFilter on their layers (selection emphasis is

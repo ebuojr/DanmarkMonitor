@@ -19,10 +19,11 @@ export const VEHICLE_TYPES: VehicleTypeDef[] = [
   { type: 'stog',     label: 'S-tog',       color: '#60a5fa' },
   // Rejseplanen's JourneyGeoPos feed carries NO positions for the driverless
   // metro (verified live 2026-07-23: central Copenhagen, all product
-  // classes, onlyRT:false — 162 journeys, zero M-trains). Metro shows as
-  // track lines on the basemap; dots would require a source that does not
-  // exist publicly. Do not fabricate positions from headways.
-  { type: 'metro',    label: 'Metro',       color: '#a78bfa', note: 'ingen live-positioner' },
+  // classes, onlyRT:false — 162 journeys, zero M-trains). So this row drives
+  // the static metro+letbane NETWORK-LINE overlay (lib/data/metro-lines.ts)
+  // instead of a dot filter — see the visibility effect in DenmarkMap. Do not
+  // fabricate positions from headways.
+  { type: 'metro',    label: 'Metro / Letbane', color: '#a78bfa', note: 'netværkslinjer' },
   { type: 'bus',      label: 'Bus',         color: '#4ade80' },
   { type: 'other',    label: 'Andet',       color: '#94a3b8' },
 ]
