@@ -17,6 +17,7 @@ import { SOLAR_PARKS_GEOJSON } from '@/lib/data/solar-parks'
 import { JourneyPanel } from '@/components/map/JourneyPanel'
 import { FlightPanel } from '@/components/map/FlightPanel'
 import { MapLegend } from '@/components/map/MapLegend'
+import { CollapseChevron } from '@/components/map/CollapseChevron'
 import { createSourceAnimator, type SourceAnimator } from '@/lib/map/animateSource'
 import { getBaseStyle, MAP_FONT, type MapStyle } from '@/lib/map/baseStyles'
 
@@ -130,6 +131,10 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
   const [popupInfo, setPopupInfo] = useState<PopupInfo | null>(null)
   const setPopupRef = useRef(setPopupInfo)
   useEffect(() => { setPopupRef.current = setPopupInfo }, [])
+  // Collapse state for the turbine/road/solar info card. Reset to open
+  // whenever a fresh feature is selected so a new card never opens collapsed.
+  const [cardOpen, setCardOpen] = useState(true)
+  useEffect(() => { if (popupInfo) setCardOpen(true) }, [popupInfo])
   const [selected, setSelected] = useState<Selected>(null)
   const setSelectedRef = useRef(setSelected)
   useEffect(() => { setSelectedRef.current = setSelected }, [])
@@ -1004,6 +1009,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       {popupInfo?.kind === 'vehicle' && (
         <div className="absolute top-3 left-3 z-20">
           <JourneyPanel
+            key={popupInfo.jid}
             jid={popupInfo.jid}
             name={popupInfo.name}
             type={popupInfo.type}
@@ -1018,6 +1024,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       {selectedFlight && (
         <div className="absolute top-3 left-3 z-20">
           <FlightPanel
+            key={selectedFlight.id}
             callsign={selectedFlight.callsign}
             route={selectedFlight.route}
             routeMismatch={selectedFlight.routeMismatch === true}
@@ -1049,14 +1056,18 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
                         : (ROAD_LABEL[popupInfo.category] ?? 'Trafikhændelse')}
                   </span>
                 </div>
-                <button onClick={() => setPopupInfo(null)} className="text-muted-foreground hover:text-foreground transition-colors shrink-0">
-                  <X size={13} />
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <CollapseChevron open={cardOpen} onToggle={() => setCardOpen((o) => !o)} />
+                  <button onClick={() => setPopupInfo(null)} className="text-muted-foreground hover:text-foreground transition-colors">
+                    <X size={13} />
+                  </button>
+                </div>
               </div>
             </CardHeader>
 
-            <Separator />
+            {cardOpen && <Separator />}
 
+            {cardOpen && (
             <CardContent className="px-3 py-2.5 flex flex-col gap-1.5 text-xs">
               {popupInfo.kind === 'turbine' ? (
                 <>
@@ -1085,6 +1096,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
                 </>
               )}
             </CardContent>
+            )}
           </Card>
         </div>
       )}

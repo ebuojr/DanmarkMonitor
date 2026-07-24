@@ -1,9 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { AlertTriangle, Plane, X } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
+import { CollapseChevron } from '@/components/map/CollapseChevron'
 import type { FlightRoute, RouteAirport } from '@/lib/types/flights'
 
 interface Props {
@@ -23,6 +25,7 @@ function airportLabel(a: RouteAirport): string {
 }
 
 export function FlightPanel({ callsign, route, routeMismatch, alt, speed, onClose }: Props) {
+  const [open, setOpen] = useState(true)
   return (
     <Card className="w-72 max-w-[calc(100vw-1.5rem)] shadow-lg gap-0 py-0">
       <CardHeader className="px-3 py-2.5 border-b border-border/60 bg-muted/30 rounded-t-xl">
@@ -31,19 +34,23 @@ export function FlightPanel({ callsign, route, routeMismatch, alt, speed, onClos
             <Plane size={14} className="text-pink-400 shrink-0" />
             <span className="text-sm font-semibold text-foreground truncate">{callsign}</span>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors shrink-0">
-            <X size={13} />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <CollapseChevron open={open} onToggle={() => setOpen((o) => !o)} />
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+              <X size={13} />
+            </button>
+          </div>
         </div>
-        {route?.airline && (
+        {open && route?.airline && (
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <Badge variant="secondary">{route.airline}</Badge>
           </div>
         )}
       </CardHeader>
 
-      <Separator />
+      {open && <Separator />}
 
+      {open && (
       <CardContent className="px-3 py-2.5 flex flex-col gap-2">
         {route && (
           <div className="flex flex-col gap-1">
@@ -66,6 +73,7 @@ export function FlightPanel({ callsign, route, routeMismatch, alt, speed, onClos
         )}
         <p className="text-muted-foreground text-xs">{Math.round(alt)} ft &middot; {Math.round(speed)} kn</p>
       </CardContent>
+      )}
     </Card>
   )
 }

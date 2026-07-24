@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Bus, Train, X } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
+import { CollapseChevron } from '@/components/map/CollapseChevron'
 import { cn } from '@/lib/utils'
 import type { Journey, JourneyStop, VehicleType } from '@/lib/types/transport'
 import { TYPE_COLOR } from '@/lib/map/palette'
@@ -83,6 +84,7 @@ function classifyStops(stops: JourneyStop[], nowMin: number): { statuses: StopSt
 }
 
 export function JourneyPanel({ jid, name, type, destination, journey, isLoading, onClose }: Props) {
+  const [open, setOpen] = useState(true)
   const color = TYPE_COLOR[type] ?? TYPE_COLOR.other
   const stops = journey?.stops ?? []
   // Header terminus follows the actual JourneyDetails stop list — the
@@ -119,9 +121,12 @@ export function JourneyPanel({ jid, name, type, destination, journey, isLoading,
             )}
             <span className="text-sm font-semibold text-foreground truncate">{name}</span>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors shrink-0">
-            <X size={13} />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <CollapseChevron open={open} onToggle={() => setOpen((o) => !o)} />
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+              <X size={13} />
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
           <Badge variant="secondary">{VEHICLE_LABEL[type] ?? 'Transport'}</Badge>
@@ -133,8 +138,9 @@ export function JourneyPanel({ jid, name, type, destination, journey, isLoading,
         </div>
       </CardHeader>
 
-      <Separator />
+      {open && <Separator />}
 
+      {open && (
       <CardContent className="px-3 py-2.5">
         {isLoading ? (
           <div className="space-y-2 animate-pulse">
@@ -191,6 +197,7 @@ export function JourneyPanel({ jid, name, type, destination, journey, isLoading,
           </ScrollArea>
         )}
       </CardContent>
+      )}
     </Card>
   )
 }
