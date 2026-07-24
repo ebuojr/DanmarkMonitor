@@ -19,9 +19,26 @@ React 19, TypeScript strict, Tailwind v4 (CSS-only config), SWR polling.
   because a single all-products request saturates its `maxJny` cap with
   Copenhagen buses and starves out the sparse country-wide trains;
   `JourneyDetails` for full routes; polyline is standard encoded, precision
-  5). HIGHEST-RISK CODE
-  otherwise: hand-rolled UTM32→WGS84 in `app/api/roadtraffic/route.ts`, regex
-  HTML scraping in `wallnot.ts`.
+  5). `fetchDisruptions()` in the same file uses HAFAS `HimSearch` for
+  service messages (Trafikmeldinger widget, `/api/disruptions`). HIGHEST-RISK
+  CODE otherwise: hand-rolled UTM32→WGS84 in `app/api/roadtraffic/route.ts`,
+  regex HTML scraping in `wallnot.ts`.
+- Static map datasets live in `lib/data/*` as hand-baked GeoJSON literals
+  (source comment at top): `wind-turbines.ts`, `solar-parks.ts` (both Point,
+  Energi layer, baked from OSM Overpass `power=plant`), and `metro-lines.ts`
+  (MultiLineString — Copenhagen Metro M1-M4 + Aarhus/Odense letbane from OSM
+  route relations). The metro overlay exists because the vector basemap only
+  carries transit geometry from ~z11 and Rejseplanen has NO live metro
+  positions (driverless) — verified — so metro is drawn as its own always-on
+  line layers (`metro-lines`/`metro-lines-casing`) at every zoom, toggled by
+  the "Metro / Letbane" legend row.
+- DMI weather warnings (Varsler): DMI's official Open Data CAP collection
+  needs a key and fails keyless, so `fetchWeatherWarnings()` in
+  `lib/api/dmi.ts` scrapes the undocumented site API
+  `dmi.dk/dmidk_byvejrWS/rest/json/Danmark/DK/WarningOverview` (no key;
+  all-null payload when nothing active). Warnings ride the existing
+  `/api/weather` envelope; `WarningsWidget` reuses `useWeather` (no separate
+  route). Change-without-notice, soft-fails to no-warnings.
 - `lib/hooks/*` — thin SWR polling hooks; shared fetcher in `lib/hooks/fetcher.ts`
   throws on non-2xx.
 - `components/map/DenmarkMap.tsx` — all MapLibre sources/layers/popups.
