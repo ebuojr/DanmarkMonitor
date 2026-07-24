@@ -8,6 +8,7 @@ import { useRoadTraffic } from '@/lib/hooks/useRoadTraffic'
 import { useNews } from '@/lib/hooks/useNews'
 import { fetcher } from '@/lib/hooks/fetcher'
 import { WIND_TURBINES_GEOJSON } from '@/lib/data/wind-turbines'
+import { SOLAR_PARKS_GEOJSON } from '@/lib/data/solar-parks'
 import type { VehicleResponse } from '@/lib/types/transport'
 import type { FocusTarget } from '@/components/map/DenmarkMap'
 
@@ -16,7 +17,7 @@ export type SearchGroup = 'transport' | 'flights' | 'energy' | 'roadtraffic' | '
 export const GROUP_LABEL: Record<SearchGroup, string> = {
   transport: 'Transport',
   flights: 'Fly',
-  energy: 'Vindmølleparker',
+  energy: 'Energi',
   roadtraffic: 'Vejhændelser',
   airports: 'Lufthavne',
   news: 'Nyheder',
@@ -137,8 +138,23 @@ export function useSearchIndex(query: string) {
         group: 'energy',
         id: p.name,
         primary: p.name,
-        secondary: `${p.capacity_mw} MW · ${p.turbines} møller · ${p.year}`,
+        secondary: `Vindmøllepark · ${p.capacity_mw} MW · ${p.turbines} møller · ${p.year}`,
         target: { kind: 'turbine', lon, lat, props: p },
+      })
+    }
+
+    for (const f of SOLAR_PARKS_GEOJSON.features) {
+      if (groups.energy.length >= cap) break
+      if (f.geometry.type !== 'Point') continue
+      const p = f.properties as { name: string; capacity_mw: number; year: number | null }
+      if (!matches(query, p.name)) continue
+      const [lon, lat] = f.geometry.coordinates as [number, number]
+      groups.energy.push({
+        group: 'energy',
+        id: p.name,
+        primary: p.name,
+        secondary: `Solcellepark · ${p.capacity_mw} MW${p.year ? ` · ${p.year}` : ''}`,
+        target: { kind: 'solar', lon, lat, props: p },
       })
     }
 

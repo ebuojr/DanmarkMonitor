@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import type { GeoJSON } from 'geojson'
-import { Wind, X, AlertTriangle } from 'lucide-react'
+import { Wind, Sun, X, AlertTriangle } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { useWeather } from '@/lib/hooks/useWeather'
@@ -13,6 +13,7 @@ import { useRoadTraffic } from '@/lib/hooks/useRoadTraffic'
 import { useFlights } from '@/lib/hooks/useFlights'
 import { WIND_TURBINES_GEOJSON } from '@/lib/data/wind-turbines'
 import { METRO_LINES_GEOJSON } from '@/lib/data/metro-lines'
+import { SOLAR_PARKS_GEOJSON } from '@/lib/data/solar-parks'
 import { JourneyPanel } from '@/components/map/JourneyPanel'
 import { FlightPanel } from '@/components/map/FlightPanel'
 import { MapLegend } from '@/components/map/MapLegend'
@@ -24,10 +25,12 @@ import type { VehicleType } from '@/lib/types/transport'
 import { VEHICLE_TYPES, TYPE_COLOR, VEHICLE_COLOR_EXPR, ROAD_CATEGORIES, ROAD_COLOR_EXPR } from '@/lib/map/palette'
 
 type TurbineProps = { name: string; capacity_mw: number; turbines: number; year: number }
+type SolarProps = { name: string; capacity_mw: number; year: number | null }
 type RoadProps = { category: string; title: string; header: string; kommune: string; direction: string; beginPeriod: string; endPeriod: string; description: string }
 
 type PopupInfo =
   | ({ kind: 'turbine' } & TurbineProps)
+  | ({ kind: 'solar' } & SolarProps)
   | { kind: 'vehicle'; jid: string; name: string; type: VehicleType; destination: string }
   | ({ kind: 'road' } & RoadProps)
 
@@ -49,6 +52,7 @@ export type FocusTarget =
   | { kind: 'vehicle'; jid: string; lon: number; lat: number; name: string; type: VehicleType; destination: string }
   | { kind: 'flight'; id: string; lon: number; lat: number }
   | { kind: 'turbine'; lon: number; lat: number; props: TurbineProps }
+  | { kind: 'solar'; lon: number; lat: number; props: SolarProps }
   | { kind: 'road'; lon: number; lat: number; props: RoadProps }
   | { kind: 'point'; lon: number; lat: number; zoom?: number }
 
@@ -90,6 +94,9 @@ const RADIUS_STOPS: [zoom: number, radius: number][] = [[5, 4], [9, 7], [12, 10]
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const CIRCLE_RADIUS_EXPR: any[] = ['interpolate', ['linear'], ['zoom'], ...RADIUS_STOPS.flat()]
 const FLIGHT_RADIUS = 4
+// Marker colors shared by their map layer, info-card icon and legend swatch.
+const TURBINE_COLOR = '#4ade80'
+const SOLAR_COLOR = '#facc15'
 
 // MapLibre requires a zoom ("interpolate"/"step") subexpression to be the
 // TOP-LEVEL expression — it can't be nested inside `case`/`+`/etc, even
@@ -169,6 +176,10 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     setPopupRef.current(null)
     setSelectedRef.current({ kind: 'flight', id })
   }
+  const selectSolar = (props: SolarProps) => {
+    setPopupRef.current({ kind: 'solar', ...props })
+    setSelectedRef.current(null)
+  }
   const selectTurbine = (props: TurbineProps) => {
     setPopupRef.current({ kind: 'turbine', ...props })
     setSelectedRef.current(null)
@@ -198,6 +209,10 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         case 'turbine':
           flyTo(target.lon, target.lat, 10)
           selectTurbine(target.props)
+          break
+        case 'solar':
+          flyTo(target.lon, target.lat, 10)
+          selectSolar(target.props)
           break
         case 'road':
           flyTo(target.lon, target.lat, 12)
@@ -259,7 +274,22 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       source: 'wind-turbines',
       paint: {
         'circle-radius': CIRCLE_RADIUS_EXPR,
-        'circle-color': '#4ade80',
+        'circle-color': TURBINE_COLOR,
+        'circle-opacity': BASE_CIRCLE_OPACITY,
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': 'rgba(255,255,255,0.35)',
+      },
+    })
+
+    // ── Solar parks — amber dots, sibling of turbines under the energy layer ─
+    map.addSource('solar-parks', { type: 'geojson', data: SOLAR_PARKS_GEOJSON })
+    map.addLayer({
+      id: 'solar-circles',
+      type: 'circle',
+      source: 'solar-parks',
+      paint: {
+        'circle-radius': CIRCLE_RADIUS_EXPR,
+        'circle-color': SOLAR_COLOR,
         'circle-opacity': BASE_CIRCLE_OPACITY,
         'circle-stroke-width': 1.5,
         'circle-stroke-color': 'rgba(255,255,255,0.35)',
@@ -469,6 +499,11 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
         selectTurbine({ name: p.name, capacity_mw: p.capacity_mw, turbines: p.turbines, year: p.year })
       })
 
+      onLayerClick('solar-circles', 9, (f) => {
+        const p = f.properties as { name: string; capacity_mw: number; year: number | null }
+        selectSolar({ name: p.name, capacity_mw: p.capacity_mw, year: p.year ?? null })
+      })
+
       onLayerClick('vehicle-circles', 9, (f) => {
         const p = f.properties as { jid: string; name: string; destination: string; type: VehicleType }
         selectVehicle(p.jid, p.name, p.type, p.destination ?? '')
@@ -505,7 +540,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       // switch there is a brief window with no data layers, and
       // queryRenderedFeatures throws on unknown ids.
       map.on('click', (e) => {
-        const layers = ['turbine-circles', 'vehicle-circles', 'road-circles', 'flight-icons']
+        const layers = ['turbine-circles', 'solar-circles', 'vehicle-circles', 'road-circles', 'flight-icons']
           .filter((id) => map.getLayer(id) !== undefined)
         const hits = layers.length === 0 ? [] : map.queryRenderedFeatures(e.point, { layers })
         if (hits.length === 0) {
@@ -631,6 +666,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
 
     if (selected !== null) {
       map.setPaintProperty('turbine-circles', 'circle-opacity', DIMMED_OPACITY)
+      map.setPaintProperty('solar-circles', 'circle-opacity', DIMMED_OPACITY)
       map.setPaintProperty('road-circles', 'circle-opacity', DIMMED_OPACITY)
       map.setPaintProperty('weather-labels', 'text-opacity', DIMMED_TEXT_OPACITY)
 
@@ -652,6 +688,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       ])
     } else {
       map.setPaintProperty('turbine-circles', 'circle-opacity', BASE_CIRCLE_OPACITY)
+      map.setPaintProperty('solar-circles', 'circle-opacity', BASE_CIRCLE_OPACITY)
       map.setPaintProperty('road-circles', 'circle-opacity', BASE_CIRCLE_OPACITY)
       map.setPaintProperty('weather-labels', 'text-opacity', 1)
       map.setPaintProperty('vehicle-circles', 'circle-opacity', BASE_CIRCLE_OPACITY)
@@ -885,6 +922,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
     const vis = (id: string, show: boolean) => map.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none')
     vis('weather-labels',  activeLayers.has('weather'))
     vis('turbine-circles', activeLayers.has('energy'))
+    vis('solar-circles',   activeLayers.has('energy'))
     vis('vehicle-circles', activeLayers.has('transport'))
     // journey-route/journey-stops are shared by vehicle journeys AND flight
     // routes now — visible if either layer that can select something is on.
@@ -943,6 +981,7 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
       setPopupInfo(null)
     }
     if (popupInfo?.kind === 'turbine' && !activeLayers.has('energy')) setPopupInfo(null)
+    if (popupInfo?.kind === 'solar' && !activeLayers.has('energy')) setPopupInfo(null)
     if (popupInfo?.kind === 'road' && (!activeLayers.has('roadtraffic') || !roadCategories.has(popupInfo.category))) setPopupInfo(null)
   }, [activeLayers, selected, popupInfo, vehicleTypes, roadCategories])
 
@@ -996,14 +1035,18 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   {popupInfo.kind === 'turbine' ? (
-                    <Wind size={14} className="text-green-400 shrink-0" />
+                    <Wind size={14} className="shrink-0" style={{ color: TURBINE_COLOR }} />
+                  ) : popupInfo.kind === 'solar' ? (
+                    <Sun size={14} className="shrink-0" style={{ color: SOLAR_COLOR }} />
                   ) : (
                     <AlertTriangle size={14} className="text-orange-400 shrink-0" />
                   )}
                   <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase truncate">
                     {popupInfo.kind === 'turbine'
                       ? 'Vindmøllepark'
-                      : (ROAD_LABEL[popupInfo.category] ?? 'Trafikhændelse')}
+                      : popupInfo.kind === 'solar'
+                        ? 'Solcellepark'
+                        : (ROAD_LABEL[popupInfo.category] ?? 'Trafikhændelse')}
                   </span>
                 </div>
                 <button onClick={() => setPopupInfo(null)} className="text-muted-foreground hover:text-foreground transition-colors shrink-0">
@@ -1019,6 +1062,11 @@ export const DenmarkMap = forwardRef<DenmarkMapHandle, Props>(function DenmarkMa
                 <>
                   <p className="text-sm font-semibold text-foreground">{popupInfo.name}</p>
                   <p className="text-muted-foreground">{popupInfo.capacity_mw} MW &middot; {popupInfo.turbines} møller &middot; {popupInfo.year}</p>
+                </>
+              ) : popupInfo.kind === 'solar' ? (
+                <>
+                  <p className="text-sm font-semibold text-foreground">{popupInfo.name}</p>
+                  <p className="text-muted-foreground">{popupInfo.capacity_mw} MW{popupInfo.year ? ` · ${popupInfo.year}` : ''}</p>
                 </>
               ) : (
                 <>

@@ -73,8 +73,12 @@ export function MapLegend({
       {showEnergy && (
         <LegendGroup title="Energi">
           <div className="flex items-center gap-2 min-h-6 px-1 text-xs">
-            <span className="size-2.5 rounded-full bg-green-400 shrink-0 border border-black/20" />
+            <span className="size-2.5 rounded-full shrink-0 border border-black/20" style={{ backgroundColor: '#4ade80' }} />
             <span className="text-foreground/80">Vindmølleparker</span>
+          </div>
+          <div className="flex items-center gap-2 min-h-6 px-1 text-xs">
+            <span className="size-2.5 rounded-full shrink-0 border border-black/20" style={{ backgroundColor: '#facc15' }} />
+            <span className="text-foreground/80">Solcelleparker</span>
           </div>
         </LegendGroup>
       )}
