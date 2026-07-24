@@ -1,6 +1,8 @@
 'use client'
 
-import { Plane, Zap, TrendingUp, BarChart2, Newspaper, CloudSun } from 'lucide-react'
+import { TrainFront, TriangleAlert, Plane, Zap, TrendingUp, BarChart2, Newspaper, CloudSun } from 'lucide-react'
+import { DisruptionsWidget } from '@/components/widgets/DisruptionsWidget'
+import { WarningsWidget } from '@/components/widgets/WarningsWidget'
 import { FlightBoard } from '@/components/widgets/FlightBoard'
 import { EnergyWidget } from '@/components/widgets/EnergyWidget'
 import { PriceWidget } from '@/components/widgets/PriceWidget'
@@ -9,9 +11,28 @@ import { NewsWidget } from '@/components/widgets/NewsWidget'
 import { WeatherWidget } from '@/components/widgets/WeatherWidget'
 import { SectionHeader } from '@/components/ui/section-header'
 
+// Ordered by live operational usefulness: what's disrupted / dangerous
+// right now first, then transport boards, energy, weather, and finally the
+// slower-moving ambient feeds (news, stocks).
 export function Sidebar() {
   return (
     <aside className="flex flex-col h-full overflow-y-auto overscroll-contain border-l border-border shrink-0 w-full lg:w-96">
+      {/* Traffic disruptions */}
+      <div className="shrink-0 border-b border-border">
+        <SectionHeader icon={TrainFront} label="Trafikmeldinger" />
+        <div className="px-1 py-1">
+          <DisruptionsWidget />
+        </div>
+      </div>
+
+      {/* Weather warnings */}
+      <div className="shrink-0 border-b border-border">
+        <SectionHeader icon={TriangleAlert} label="Varsler" />
+        <div className="px-1 py-1">
+          <WarningsWidget />
+        </div>
+      </div>
+
       {/* Airports */}
       <div className="shrink-0 border-b border-border">
         <SectionHeader icon={Plane} label="Lufthavne" />
@@ -36,10 +57,12 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Stocks */}
+      {/* Weather */}
       <div className="shrink-0 border-b border-border">
-        <SectionHeader icon={BarChart2} label="Danske Aktier" />
-        <StocksWidget />
+        <SectionHeader icon={CloudSun} label="Vejr" />
+        <div className="p-3">
+          <WeatherWidget />
+        </div>
       </div>
 
       {/* News */}
@@ -52,12 +75,10 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Weather */}
+      {/* Stocks */}
       <div className="shrink-0 border-b border-border">
-        <SectionHeader icon={CloudSun} label="Vejr" />
-        <div className="p-3">
-          <WeatherWidget />
-        </div>
+        <SectionHeader icon={BarChart2} label="Danske Aktier" />
+        <StocksWidget />
       </div>
     </aside>
   )
