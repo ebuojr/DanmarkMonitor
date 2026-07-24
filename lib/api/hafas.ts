@@ -252,6 +252,78 @@ export async function fetchVehiclePositions(viewport?: ViewportBbox): Promise<Ve
   return [...byJid.values()].filter((v) => v.lat > 54 && v.lat < 58 && v.lon > 5 && v.lon < 16)
 }
 
+// ── Disruptions / traffic messages (HAFAS HIM) ─────────────────────────────
+// HimSearch returns free-text service messages ("Linje 2A kører en anden
+// rute…") with head/text, the operating company, product class and a
+// start/end validity period. Same public web `aid` as the position feed.
+export interface Disruption {
+  id: string
+  head: string
+  text: string
+  company: string
+  /** HAFAS product class of the affected line (32 = bus, 16 = S-tog, …). */
+  type: VehicleType
+  /** Lower = more important in HAFAS; surfaced so the UI can sort/emphasize. */
+  priority: number
+  /** Validity window as "YYYY-MM-DD" strings (undefined when unbounded/absent). */
+  start?: string
+  end?: string
+}
+
+interface MgateHimMsg {
+  hid?: string
+  head?: string
+  text?: string
+  comp?: string
+  prod?: number
+  prio?: number
+  act?: boolean
+  sDate?: string
+  eDate?: string
+}
+
+interface HimSearchRes {
+  msgL?: MgateHimMsg[]
+}
+
+// "YYYYMMDD" -> "YYYY-MM-DD"; anything else -> undefined.
+function formatDate(raw: string | undefined): string | undefined {
+  if (!raw || raw.length < 8) return undefined
+  return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`
+}
+
+// prod is a single-product BITMASK on HIM messages (unlike the vehicle feed's
+// prodX index), so map by the highest set class via the same CLS_TYPE table.
+function classifyProd(prod: number | undefined): VehicleType {
+  if (!prod) return 'other'
+  for (const cls of [16, 8, 4, 2, 1, 128, 64, 32]) {
+    if (prod & cls) return CLS_TYPE[cls] ?? 'other'
+  }
+  return 'other'
+}
+
+export async function fetchDisruptions(maxNum = 60): Promise<Disruption[]> {
+  const res = (await callMgate('HimSearch', { himFltrL: [], maxNum })) as HimSearchRes
+  const msgs = res.msgL ?? []
+  return msgs
+    .filter((m) => m.act !== false && (m.head || m.text))
+    .map((m): Disruption => ({
+      id: m.hid ?? `${m.head}-${m.sDate ?? ''}`,
+      head: (m.head ?? '').trim(),
+      text: (m.text ?? '').replace(/\s+/g, ' ').trim(),
+      company: (m.comp ?? '').trim(),
+      type: classifyProd(m.prod),
+      priority: m.prio ?? 999,
+      start: formatDate(m.sDate),
+      end: formatDate(m.eDate),
+    }))
+    // Rail first (most impactful), then by HAFAS priority.
+    .sort((a, b) => {
+      const rail = (t: VehicleType) => (t === 'ic' || t === 'regional' || t === 'stog' ? 0 : 1)
+      return rail(a.type) - rail(b.type) || a.priority - b.priority
+    })
+}
+
 // "HHMMSS" (possibly with a day-offset prefix, length 8) -> "HH:MM" from the
 // last 6 chars.
 function formatTime(raw: string | undefined): string | undefined {
